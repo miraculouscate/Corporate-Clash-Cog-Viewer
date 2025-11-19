@@ -7,7 +7,7 @@ Hi! This tool is mainly used for viewing Corporate Clash Cogs as well as making 
 # Prequisites
 * [Panda3D](https://www.panda3d.org/download/)
 * [Python](https://www.python.org/downloads/)
-* [ImageMagick](https://imagemagick.org/script/download.php#windows) _Note: This one's optional, it's only purpose is for cropping images._
+* [ImageMagick](https://imagemagick.org/script/download.php#windows) _Note: This one's optional, its only purpose is for cropping images._
 
 
 ## What dat button do
