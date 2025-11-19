@@ -1,7 +1,6 @@
 import os
 import tkinter as tk
 from tkinter import ttk, filedialog, PhotoImage
-from pandac.PandaModules import *
 from datetime import datetime
 from panda3d.core import (AntialiasAttrib, Loader, TextNode, Mat4,
                           Filename, Texture, loadPrcFile, ClockObject,
