@@ -273,9 +273,9 @@ class ControlPanel(tk.Frame):
         self.toggles_frame = frame
         frame.pack(fill="x", expand=True)
 
-        frame.columnconfigure(0, weight=1)      # Column 1
-        frame.columnconfigure(1, weight=1)      # Column 2
-        frame.columnconfigure(2, weight=1)      # Column 3
+        frame.columnconfigure(0, weight=1)  # Column 1
+        frame.columnconfigure(1, weight=1)  # Column 2
+        frame.columnconfigure(2, weight=1)  # Column 3
 
         # Cog Shadow Toggle
         ttk.Checkbutton(frame, text="Toggle Shadow", variable=self.is_shadow_var,
@@ -294,7 +294,7 @@ class ControlPanel(tk.Frame):
                         command=self.app.toggle_flatten).grid(row=4, column=0, sticky="w", pady=2)
         # Manager Costume Toggle
         self.costume_button = ttk.Checkbutton(frame, text="Toggle Costume", variable=self.is_costume_var,
-                        command=self.app.toggle_costume)
+                                              command=self.app.toggle_costume)
         self.costume_button.grid(row=5, column=0, sticky="w", pady=2)
         self.costume_button.grid_remove()
 
@@ -311,18 +311,18 @@ class ControlPanel(tk.Frame):
         self.is_waiter_var = tk.BooleanVar(value=False)
 
         self.suit_exec_check = ttk.Checkbutton(suit_frame, text="Make Executive",
-                                               variable=self.is_executive_var, 
+                                               variable=self.is_executive_var,
                                                command=lambda: self.app.set_suit_texture("exec"))
         self.suit_exec_check.pack(anchor="w", padx=5)
 
         self.suit_fired_check = ttk.Checkbutton(suit_frame, text="Make Fired",
-                                                variable=self.is_fired_var, 
+                                                variable=self.is_fired_var,
                                                 command=lambda: self.app.set_suit_texture("fired"))
         self.suit_fired_check.pack(anchor="w", padx=5)
 
         self.suit_waiter_check = ttk.Checkbutton(suit_frame, text="Make Waiter",
-                                                variable=self.is_waiter_var, 
-                                                command=lambda: self.app.set_suit_texture("waiter"))
+                                                 variable=self.is_waiter_var,
+                                                 command=lambda: self.app.set_suit_texture("waiter"))
         self.suit_waiter_check.pack(anchor="w", padx=5)
 
         # Unique Toggles
@@ -352,7 +352,7 @@ class ControlPanel(tk.Frame):
 
         ttk.Button(frame, text="Toggle Virtualize",
                    command=self.app.toggle_virtualize).grid(row=0, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Button(frame, text="Cycle Meter",
+        ttk.Button(frame, text="Cycle Health Meter",
                    command=self.app.toggle_skele_meter_color).grid(row=1, column=1, sticky="ew", padx=5, pady=2)
 
         self.suit_toggle_button = ttk.Button(frame, text="Toggle Suit Type",
@@ -1402,7 +1402,7 @@ class CogViewer(ShowBase):
         self.control_panel.is_fired_var.set(False)
         self.control_panel.is_waiter_var.set(False)
         self.is_body = True
-        
+
         self.control_panel.reset_head_hpr()
 
         if self.cog_data.get("hasHalloween") == 1:
@@ -1419,7 +1419,6 @@ class CogViewer(ShowBase):
         self.control_panel.unique_suit_button.pack_forget()
         self.control_panel.ds_frame.pack_forget()
         self.control_panel.suit_toggle_button.grid_remove()
-        
 
         if suitToggle in ["y", "s", "u"]:
             # Show standard toggles
@@ -1470,7 +1469,7 @@ class CogViewer(ShowBase):
     def set_suit_texture(self, trigger=None):
         """Applies Executive, Fired, or Waiter textures."""
         if not self.cog_data: return
-        
+
         is_exec = self.control_panel.is_executive_var.get()
         is_fired = self.control_panel.is_fired_var.get()
         is_waiter = self.control_panel.is_waiter_var.get()
@@ -1480,11 +1479,11 @@ class CogViewer(ShowBase):
             self.control_panel.is_waiter_var.set(False)
             is_exec = False
             is_waiter = False
-        
+
         elif trigger == "exec" and is_exec:
             self.control_panel.is_fired_var.set(False)
             is_fired = False
-            
+
         elif trigger == "waiter" and is_waiter:
             self.control_panel.is_fired_var.set(False)
             is_fired = False
@@ -1492,29 +1491,31 @@ class CogViewer(ShowBase):
         cog_name = self.cog_data["name"]
         dept = self.cog_data["dept"]
         suitToggle = self.cog_data.get("suitToggle")
-        
+
         paths = globals.SUIT_TEXTURE_PATH
-        
-        tex_key = dept 
-        if suitToggle == "s": tex_key = dept + "s"
-        elif cog_name in paths: tex_key = cog_name
-        
+
+        tex_key = dept
+        if suitToggle == "s":
+            tex_key = dept + "s"
+        elif cog_name in paths:
+            tex_key = cog_name
+
         tex_list = paths.get(tex_key)
         if not tex_list: return
 
-        tex_to_apply = tex_list[0] # Default
-        
+        tex_to_apply = tex_list[0]  # Default
+
         if is_fired:
-            tex_to_apply = tex_list[-1] 
+            tex_to_apply = tex_list[-1]
 
         elif is_waiter and tex_key in ["c", "cs"] and len(tex_list) > 3:
             if is_exec:
-                tex_to_apply = tex_list[3] # Waiter Executive
+                tex_to_apply = tex_list[3]  # Waiter Executive
             else:
-                tex_to_apply = tex_list[2] # Waiter (Normal)
+                tex_to_apply = tex_list[2]  # Waiter (Normal)
 
         elif is_exec and len(tex_list) > 1:
-            tex_to_apply = tex_list[1] # Standard Executive
+            tex_to_apply = tex_list[1]  # Standard Executive
 
         # Apply the texture
         tx_suit = loader.loadTexture(tex_to_apply)
@@ -1522,11 +1523,11 @@ class CogViewer(ShowBase):
         self.actor.find('**/necktie-s').setTexture(tx_suit, 1)
         self.actor.find('**/necktie-w').setTexture(tx_suit, 1)
         self.actor.find('**/bowtie').setTexture(tx_suit, 1)
-        
-        if suitToggle == "s":
-            self.head.setTexture(tx_suit, 1) # Skelecogs
 
-        elif cog_name in ["cc_a_ene_bagholder", "cc_a_ene_insider", "cc_a_ene_headhoncho"]: # stupid boardbots
+        if suitToggle == "s":
+            self.head.setTexture(tx_suit, 1)  # Skelecogs
+
+        elif cog_name in ["cc_a_ene_bagholder", "cc_a_ene_insider", "cc_a_ene_headhoncho"]:  # stupid boardbots
             head_tex_list = globals.HEAD_TEXTURE_PATH.get(tex_key)
             if head_tex_list:
                 head_tex = head_tex_list[0]
