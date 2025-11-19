@@ -9,7 +9,8 @@ Hi! This tool is mainly used for viewing Corporate Clash Cogs as well as making 
 * [Python](https://www.python.org/downloads/)
 * [ImageMagick](https://imagemagick.org/script/download.php#windows) _Note: This one's optional, its only purpose is for cropping images._
 
-
+## How to use 
+Paste all of your Corporate Clash .mf files in the resources folder. Once extracted, go to the scripts folder and double click on start.bat
 ## What dat button do
 ### Cog List
 Tab             | Action
