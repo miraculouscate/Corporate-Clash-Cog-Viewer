@@ -2,6 +2,7 @@ import os
 import tkinter as tk
 from tkinter import ttk, filedialog, PhotoImage
 from datetime import datetime
+import random
 from panda3d.core import (AntialiasAttrib, Loader, TextNode, Mat4,
                           Filename, Texture, loadPrcFile, ClockObject,
                           ColorBlendAttrib, loadPrcFileData)
@@ -9,8 +10,12 @@ from direct.showbase.ShowBase import ShowBase
 from direct.actor.Actor import Actor
 from direct.task import Task
 from direct.interval.IntervalGlobal import Func
+from panda3d.core import TextureAttrib, TextureStage
+import glob
 import globals
+from tkinter.colorchooser import askcolor
 
+# i view da cog
 # --- Load Config and Resources ---
 loadPrcFile(globals.CONFIG_DIR)
 
@@ -27,6 +32,8 @@ class ControlPanel(tk.Frame):
         self.app = app
         self.pack(fill="both", expand=True)
         self.toggles_frame = None
+        self.suit_library_frame = None
+        self.head_hpr_frame = None
 
         # State Variables for Checkbuttons
         self.is_shadow_var = tk.BooleanVar(value=self.app.is_shadow)
@@ -34,15 +41,16 @@ class ControlPanel(tk.Frame):
         self.is_body_var = tk.BooleanVar(value=False)
         self.is_autoplay_var = tk.BooleanVar(value=self.app.is_autoplay)
         self.is_background_black_var = tk.BooleanVar(value=self.app.bool)
-        self.is_flattened_var = tk.BooleanVar(value=False)
         self.is_costume_var = tk.BooleanVar(value=False)
         self.loop_body_var = tk.BooleanVar(value=True)
         self.loop_head_var = tk.BooleanVar(value=True)
         self.selected_cog_var = tk.StringVar(value=self.app.current_cog)
-        self.TIE_OPTIONS = ["(Default)", "Skinny Tie", "Wide Tie", "Bowtie", "None"]
+        self.TIE_OPTIONS = ["(Default)", "Thin Tie", "Wide Tie", "Bowtie", "None"]
         self.tie_options_hidden_var = False
 
         self.head_hpr_vars = {}
+        self.flatten_body_vars = {}
+        self.flatten_head_vars = {}
         self.prop1_vars = {}
         self.prop2_vars = {}
         self.custom_model_vars = {}
@@ -51,7 +59,6 @@ class ControlPanel(tk.Frame):
         self.bottom_notebook = None
         self.selected_tie_var = tk.StringVar(value="(Default)")
 
-        # --- NEW: Prop anim UI storage ---
         self.prop1_anim_frame = None
         self.prop2_anim_frame = None
         self.prop1_anim_listbox = None
@@ -62,9 +69,8 @@ class ControlPanel(tk.Frame):
         self.prop2_loop_var = tk.BooleanVar(value=True)
 
         self.master.title("Corporate Clash Cog Viewer")
-        self.master.geometry("600x900")
+        self.master.geometry("750x900")
 
-        # --- NEW TOP-LEVEL NOTEBOOK (Request #1) ---
         top_level_notebook = ttk.Notebook(self)
         top_level_notebook.pack(fill="both", expand=True, padx=5, pady=5)
 
@@ -137,7 +143,7 @@ class ControlPanel(tk.Frame):
 
         # Toggles Tab
         toggles_frame = ttk.Frame(bottom_notebook, padding=10)
-        bottom_notebook.add(toggles_frame, text='Toggles')
+        bottom_notebook.add(toggles_frame, text='Main')
         self._create_toggles(toggles_frame)
 
         # Animation Tab
@@ -145,10 +151,24 @@ class ControlPanel(tk.Frame):
         bottom_notebook.add(anim_sliders_frame, text='Animation')
         self._create_anim_sliders(anim_sliders_frame)
 
+        # Suit Library Tab
+        self.suit_library_frame = ttk.Frame(bottom_notebook, padding=10)
+        bottom_notebook.add(self.suit_library_frame, text='Suit Library')
+        self._create_suit_library(self.suit_library_frame)
+
         # Head HPR Tab
-        head_hpr_frame = ttk.Frame(bottom_notebook, padding=10)
-        bottom_notebook.add(head_hpr_frame, text='Head HPR')
-        self._create_head_hpr_sliders(head_hpr_frame)
+        self.head_hpr_frame = ttk.Frame(bottom_notebook, padding=10)
+        bottom_notebook.add(self.head_hpr_frame, text='Head HPR')
+        self._create_head_hpr_sliders(self.head_hpr_frame)
+
+        # Flatten Tab
+        self.flatten_frame = ttk.Frame(bottom_notebook, padding=10)
+        bottom_notebook.add(self.flatten_frame, text='Set Scale')
+        self._create_flatten_sliders(self.flatten_frame)
+
+        self.color_tab_frame = ttk.Frame(self.bottom_notebook, padding=10)
+        self.bottom_notebook.add(self.color_tab_frame, text='Set Color')
+        self._create_color_controls(self.color_tab_frame)
 
         # Accessory Tab
         self.custom_model_tab_frame = ttk.Frame(self.bottom_notebook, padding=10)
@@ -276,33 +296,33 @@ class ControlPanel(tk.Frame):
         frame.columnconfigure(1, weight=1)  # Column 2
         frame.columnconfigure(2, weight=1)  # Column 3
 
-        # Cog Shadow Toggle
-        ttk.Checkbutton(frame, text="Toggle Shadow", variable=self.is_shadow_var,
-                        command=self.app.toggle_shadow).grid(row=0, column=0, sticky="w", pady=2)
-        # Cog Body Toggle
-        ttk.Checkbutton(frame, text="Toggle Body", variable=self.is_body_var,
-                        command=self.app.toggle_body).grid(row=1, column=0, sticky="w", pady=2)
         # Autoplay Animation Toggle
         ttk.Checkbutton(frame, text="Autoplay Animations", variable=self.is_autoplay_var,
-                        command=self.app.autoplay_animations).grid(row=2, column=0, sticky="w", pady=2)
+                        command=self.app.autoplay_animations).grid(row=0, column=0, sticky="w", pady=2)
+        # Cog Shadow Toggle
+        ttk.Checkbutton(frame, text="Toggle Shadow", variable=self.is_shadow_var,
+                        command=self.app.toggle_shadow).grid(row=1, column=0, sticky="w", pady=2)
+        # Cog Body Toggle
+        self.body_toggle_btn = ttk.Checkbutton(frame, text="Toggle Body", variable=self.is_body_var,
+                                               command=self.app.toggle_body)
+        self.body_toggle_btn.grid(row=2, column=0, sticky="w", pady=2)
+
         # Background Color Toggle
-        ttk.Checkbutton(frame, text="Black Background", variable=self.is_background_black_var,
-                        command=self.app.toggle_background).grid(row=3, column=0, sticky="w", pady=2)
-        # Flatten Cog Toggle
-        ttk.Checkbutton(frame, text="Flatten Cog", variable=self.is_flattened_var,
-                        command=self.app.toggle_flatten).grid(row=4, column=0, sticky="w", pady=2)
+        # ttk.Checkbutton(frame, text="Black Background", variable=self.is_background_black_var,
+        # command=self.app.toggle_background).grid(row=3, column=0, sticky="w", pady=2)
+
         # Manager Costume Toggle
         self.costume_button = ttk.Checkbutton(frame, text="Toggle Costume", variable=self.is_costume_var,
                                               command=self.app.toggle_costume)
-        self.costume_button.grid(row=5, column=0, sticky="w", pady=2)
+        self.costume_button.grid(row=3, column=0, sticky="w", pady=2)
         self.costume_button.grid_remove()
 
-        self.tie_frame = self._create_radio_list(frame, "Necktie Toggles", self.TIE_OPTIONS, self.selected_tie_var,
-                                                 self.on_tie_select_radio)
-        self.tie_frame.grid(row=0, column=2, rowspan=5, sticky="nsew", padx=5, pady=2)
+        # self.tie_frame = self._create_radio_list(frame, "Necktie Toggles", self.TIE_OPTIONS, self.selected_tie_var,
+        #                                          self.on_tie_select_radio)
+        # self.tie_frame.grid(row=0, column=2, rowspan=5, sticky="nsew", padx=5, pady=2)
 
         suit_frame = ttk.Labelframe(frame, text="Suit Toggles")
-        suit_frame.grid(row=5, column=2, rowspan=3, sticky="nsew", padx=5, pady=2)
+        suit_frame.grid(row=0, column=2, rowspan=3, sticky="nsew", padx=5, pady=2)
 
         # Standard Toggles
         self.is_executive_var = tk.BooleanVar(value=False)
@@ -342,6 +362,13 @@ class ControlPanel(tk.Frame):
                                    command=self.app.cycle_slot_r)
         self.ds_r_btn.pack(fill="x", expand=True, pady=1)
 
+        ttk.Button(frame, text="Upload Head Texture",
+                   command=self.app.upload_head_texture).grid(row=5, column=0, sticky="ew", padx=5, pady=2)
+        ttk.Button(frame, text="Add Pie Splat",
+                   command=self.app.add_pie_splat).grid(row=6, column=0, sticky="ew", padx=5, pady=2)
+        ttk.Button(frame, text="Clear Pie Splats",
+                   command=self.app.clear_pie_splats).grid(row=7, column=0, sticky="ew", padx=5, pady=2)
+
         # Hide all suit toggles by default
         self.suit_exec_check.pack_forget()
         self.suit_fired_check.pack_forget()
@@ -363,10 +390,10 @@ class ControlPanel(tk.Frame):
                    command=self.app.reset_camera_pos).grid(row=2, column=1, sticky="ew", padx=5, pady=2)
         ttk.Button(frame, text="Reset Camera Roll",
                    command=self.app.reset_camera_roll).grid(row=3, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Button(frame, text="Upload Suit Texture",
-                   command=self.app.upload_suit_texture).grid(row=4, column=1, sticky="ew", padx=5, pady=2)
         ttk.Button(frame, text="Upload Accessory",
-                   command=self.app.upload_custom_model).grid(row=5, column=1, sticky="ew", padx=5, pady=2)
+                   command=self.app.upload_custom_model).grid(row=4, column=1, sticky="ew", padx=5, pady=2)
+        ttk.Button(frame, text="Upload Suit Texture",
+                   command=self.app.upload_suit_texture).grid(row=5, column=1, sticky="ew", padx=5, pady=2)
         ttk.Button(frame, text="Take Screenshot",
                    command=self.app.take_screenshot).grid(row=6, column=1, sticky="ew", padx=5, pady=2)
         ttk.Button(frame, text="Render Frames",
@@ -450,11 +477,131 @@ class ControlPanel(tk.Frame):
             self.loop_head_var
         )
 
+    def _create_flatten_sliders(self, master):
+        default_body = self.app.cog_data.get("scale", 1.0)
+        flatten_slider_body_defs = [
+            ("Profile (Sx)", "Sx", 0.01, 15, default_body),
+            ("Portrait (Sy)", "Sy", 0.01, 15, default_body),
+            ("Height (Sz)", "Sz", 0.01, 15, default_body),
+        ]
+        default_head = self.app.cog_data.get("headSize", 1.0)
+        flatten_slider_head_defs = [
+            ("Profile (Sx)", "Sx", 0.01, 15, default_head),
+            ("Portrait (Sy)", "Sy", 0.01, 15, default_head),
+            ("Height (Sz)", "Sz", 0.01, 15, default_head),
+        ]
+
+        # Body
+        body_frame = ttk.Labelframe(master, text="Cog Scale")
+        body_frame.pack(fill="x", expand=True, padx=5, pady=0)
+
+        for label, axis, min_val, max_val, default_val in flatten_slider_body_defs:
+            var = tk.DoubleVar(value=default_val)
+            self.flatten_body_vars[axis] = var
+            # Row frame
+            row = ttk.Frame(body_frame)
+            row.pack(fill="x", expand=True, pady=2)
+            # Label
+            ttk.Label(row, text=label, width=11, anchor="w").pack(side=tk.LEFT)
+            # Slider
+            scale = ttk.Scale(row, from_=min_val, to=max_val, orient=tk.HORIZONTAL, variable=var)
+            scale.pack(side=tk.LEFT, fill="x", expand=True, padx=5)
+            # Text Entry
+            entry = ttk.Entry(row, textvariable=var, width=7)
+            entry.pack(side=tk.LEFT, padx=5)
+            # Reset Buttons
+            reset_btn = ttk.Button(row, text="Reset", width=6,
+                                   command=lambda axis=axis, v=var: self.reset_flat_body_axis(axis, v))
+            reset_btn.pack(side=tk.LEFT)
+            var.trace_add("write", self._create_flatten_trace_callback(var, axis))
+
+        # Head
+        head_frame = ttk.Labelframe(master, text="Head Scale")
+        head_frame.pack(fill="x", expand=True, padx=5, pady=0)
+
+        for label, axis, min_val, max_val, default_val in flatten_slider_head_defs:
+            var = tk.DoubleVar(value=default_val)
+            self.flatten_head_vars[axis] = var
+            # Row frame
+            row = ttk.Frame(head_frame)
+            row.pack(fill="x", expand=True, pady=2)
+            # Label
+            ttk.Label(row, text=label, width=11, anchor="w").pack(side=tk.LEFT)
+            # Slider
+            slider = ttk.Scale(row, from_=min_val, to=max_val,
+                               orient=tk.HORIZONTAL, variable=var)
+            slider.pack(side=tk.LEFT, fill="x", expand=True, padx=5)
+            # Text Entry
+            entry = ttk.Entry(row, textvariable=var, width=7)
+            entry.pack(side=tk.LEFT, padx=5)
+            # Reset Buttons
+            reset_btn = ttk.Button(row, text="Reset", width=6,
+                                   command=lambda axis=axis: self.reset_flat_head_axis(axis))
+            reset_btn.pack(side=tk.LEFT)
+            var.trace_add("write", self._create_flatten_head_trace_callback(var, axis))
+
+        # Reset all scale
+        ttk.Separator(master, orient=tk.HORIZONTAL).pack(fill="x", pady=5)
+        reset_all_btn = ttk.Button(master, text="Reset All Controls", command=self.reset_flatten)
+        reset_all_btn.pack(fill="x", expand=True)
+
+    def _create_color_controls(self, master):  # i color the cog
+        entry_frame = ttk.Frame(master)
+        entry_frame.pack(fill='x', pady=5)
+
+        ttk.Label(entry_frame, text="Hex (#RRGGBB):").pack(side=tk.LEFT, padx=(0, 5))
+
+        self.hex_color_var = tk.StringVar(value="#FFFFFF")
+        self.hex_entry = ttk.Entry(entry_frame, textvariable=self.hex_color_var, width=10)
+        self.hex_entry.pack(side=tk.LEFT, padx=5)
+
+        def open_picker():
+            color = askcolor(color=self.hex_color_var.get())[1]
+            if color:
+                self.hex_color_var.set(color)
+
+        picker_btn = ttk.Button(entry_frame, text="Picker", width=6, command=open_picker)
+        picker_btn.pack(side=tk.LEFT, padx=5)
+
+        btn_frame = ttk.Frame(master)
+        btn_frame.pack(fill='x', pady=5)
+
+        ttk.Button(btn_frame, text="Set Cog ColorScale",
+                   command=lambda: self.app.apply_body_colorscale(self.hex_color_var.get())
+                   ).pack(fill='x', pady=2)
+
+        ttk.Button(btn_frame, text="Set Head Color",
+                   command=lambda: self.app.apply_head_color(self.hex_color_var.get())
+                   ).pack(fill='x', pady=2)
+
+        ttk.Button(btn_frame, text="Set Hand Color",
+                   command=lambda: self.app.apply_hand_color(self.hex_color_var.get())
+                   ).pack(fill='x', pady=2)
+
+        ttk.Button(btn_frame, text="Reset Cog Colors",
+                   command=self.app.reset_cog_colors
+                   ).pack(fill='x', pady=5)
+
+        ttk.Separator(btn_frame, orient=tk.HORIZONTAL).pack(fill='x', expand=True, pady=5)
+
+        ttk.Button(btn_frame, text="Set Background Color",
+                   command=lambda: self.app.apply_background_color(self.hex_color_var.get())
+                   ).pack(fill='x', pady=2)
+
+        ttk.Button(btn_frame, text="Reset Background Color",
+                   command=self.app.reset_background_color
+                   ).pack(fill='x', pady=5)
+
     def _create_head_hpr_sliders(self, master):
+        default = self.app.get_head_hpr_default_values()
         slider_defs = [
-            ("Heading (H)", "h", -360, 360, 0.0),
-            ("Pitch (P)", "p", -180, 180, 0.0),
-            ("Roll (R)", "r", -360, 360, 0.0),
+            ("Left/Right", "x", -15, 15, default["x"]),
+            ("Front/Back", "y", -15, 15, default["y"]),
+            ("Up/Down", "z", -15, 15, default["z"]),
+            ("Heading", "h", -180, 180, default["h"]),
+            ("Pitch", "p", -180, 180, default["p"]),
+            ("Roll", "r", -180, 180, default["r"]),
+            ("Scale", "scale", 0.0, 15, default["scale"])
         ]
 
         main_frame = ttk.Frame(master)
@@ -481,24 +628,100 @@ class ControlPanel(tk.Frame):
 
             # Reset Button
             reset_btn = ttk.Button(row, text="Reset", width=6,
-                                   command=lambda v=var, val=default_val: v.set(val))
+                                   command=lambda axis=axis, v=var: self.reset_head_axis(axis, v))
             reset_btn.pack(side=tk.LEFT)
 
             var.trace_add("write", self._create_hpr_trace_callback(var, axis))
 
         # Reset All Button
-        ttk.Separator(main_frame, orient=tk.HORIZONTAL).pack(fill='x', expand=True, pady=10)
-        reset_all_btn = ttk.Button(main_frame, text="Reset All Head HPR", command=self.reset_head_hpr)
+        ttk.Separator(main_frame, orient=tk.HORIZONTAL).pack(fill='x', expand=True, pady=5)
+        reset_all_btn = ttk.Button(main_frame, text="Reset All Head Controls", command=self.reset_head_hpr)
         reset_all_btn.pack(fill="x", expand=True)
+
+    def update_head_hpr_sliders(self):
+        if not hasattr(self.app, "store_head_hpr"):
+            return
+
+        for axis, var in self.head_hpr_vars.items():
+            if axis in self.app.store_head_hpr:
+                var.set(self.app.store_head_hpr[axis])
+
+    def _create_color_frame(self):
+        master = self.color_inner_frame
+        master.update_idletasks()
+
+    def _create_suit_library(self, master):
+        # -------- SUIT TEXTURES --------#
+        SUIT_TEXTURES = globals.SUIT_TEXTURES
+
+        suit_notebook = ttk.Notebook(master)
+        suit_notebook.grid(row=0, column=0, sticky="nsew")
+        suit_categories = ["Standard", "Manager", "Halloween", "Skelecog"]  # Each of the suit categories
+        self.selected_suit_tex_var = tk.StringVar()
+
+        # This part fills the categories
+        for category in suit_categories:
+            category_suit_data = SUIT_TEXTURES.get(category, {})  # Get the data from suit textures dictionary
+            tex_frame = self._create_scrollable_radio_list(suit_notebook, f"{category} Suit Textures",
+                                                           list(category_suit_data.keys()), self.selected_suit_tex_var,
+                                                           self.on_suit_tex_select, 225, 225)
+            suit_notebook.add(tex_frame, text=category)
+
+        # -------- SUIT MODELS --------#
+        SUIT_MODEL_DICT = list(globals.SUIT_MODEL_DICT.keys())[:-1]  # fuDGE you bosscog model
+        suit_model_names = [(globals.SUIT_MODEL_NAMES[k], k) for k in SUIT_MODEL_DICT]
+
+        suit_mod_notebook = ttk.Notebook(master)
+        suit_mod_notebook.grid(row=0, column=1, sticky="e")
+        self.selected_suit_mod_var = tk.StringVar()
+
+        mod_frame = self._create_scrollable_radio_list(suit_mod_notebook, "Suit Models", suit_model_names,
+                                                       self.selected_suit_mod_var, self.on_suit_mod_select, 225, 225,
+                                                       True)
+        suit_mod_notebook.add(mod_frame, text="Suit Models")
+
+        # -------- SUIT EMBLEMS --------#
+        self.selected_emblem_var = tk.StringVar()
+        emblem_dict = list(globals.EMBLEM_MAP.keys())
+        emblem_frame = self._create_radio_list(suit_mod_notebook, "Chest Emblems", emblem_dict,
+                                                          self.selected_emblem_var, self.on_emblem_select)
+        suit_mod_notebook.add(emblem_frame, text="Emblems")
+
+        # ---------- SUIT NECKTIES --------------#
+        tie_frame = self._create_radio_list(suit_mod_notebook, "Necktie Models", self.TIE_OPTIONS,
+                                                 self.selected_tie_var, self.on_tie_select_radio)
+        suit_mod_notebook.add(tie_frame, text="Neckties")
+
+    def on_suit_tex_select(self):
+        suit_name = self.selected_suit_tex_var.get()
+        if suit_name:
+            for category in globals.SUIT_TEXTURES:
+                if suit_name in globals.SUIT_TEXTURES[category]:
+                    texture_path = globals.SUIT_TEXTURES[category].get(suit_name)
+                    if texture_path:
+                        self.app.apply_suit_texture(texture_path)
+
+    def on_suit_mod_select(self):
+        suit_key = self.selected_suit_mod_var.get()
+        if suit_key in globals.SUIT_MODEL_DICT:
+            self.app.apply_suit_model(suit_key)
+
+    def on_emblem_select(self):
+        emblem_key = self.selected_emblem_var.get()
+        emblem_name = globals.EMBLEM_MAP.get(emblem_key)
+        if emblem_key in globals.EMBLEM_MAP:
+            self.app.apply_emblem(emblem_name)
+            # Override health meter
+            self.app.store_health_meter = False
 
     def _create_prop_sliders(self, master, update_callback):
         is_prop1 = (update_callback == self.app.update_prop_hpr)
         vars_dict = self.prop1_vars if is_prop1 else self.prop2_vars
 
         slider_defs = [
-            ("Pos X", "x", -30, 30, 0.0),
-            ("Pos Y", "y", -30, 30, 0.0),
-            ("Pos Z", "z", -30, 30, 0.0),
+            ("Left/Right", "x", -30, 30, 0.0),
+            ("Front/Back", "y", -30, 30, 0.0),
+            ("Up/Down", "z", -30, 30, 0.0),
             ("Heading", "h", -360, 360, 0.0),
             ("Pitch", "p", -180, 180, 0.0),
             ("Roll", "r", -360, 360, 0.0),
@@ -541,28 +764,39 @@ class ControlPanel(tk.Frame):
                                    command=lambda d=vars_dict: self.reset_prop_sliders(d))
         reset_all_btn.pack(fill="x", expand=True)
 
-    def _create_scrollable_radio_list(self, master, label_text, items, variable, command, width=200):
+    def _create_scrollable_radio_list(self, master, label_text, items, variable, command, width=200, height=100,
+                                      set_text=False):
         frame = ttk.Labelframe(master, text=label_text)
 
         scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL)
         canvas = tk.Canvas(frame, yscrollcommand=scrollbar.set, borderwidth=0, highlightthickness=0, width=width,
-                           height=100)
+                           height=height)
 
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        canvas.pack(side=tk.LEFT, fill=tk.Y, expand=True)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         scrollbar.config(command=canvas.yview)
         inner_frame = ttk.Frame(canvas)
         canvas.create_window((0, 0), window=inner_frame, anchor="nw")
 
-        for item in items:
-            ttk.Radiobutton(
-                inner_frame,
-                text=item,
-                variable=variable,
-                value=item,
-                command=command
-            ).pack(anchor="nw", fill="x", padx=5, pady=1)
+        if not set_text:
+            for item in items:
+                ttk.Radiobutton(
+                    inner_frame,
+                    text=item,
+                    variable=variable,
+                    value=item,
+                    command=command
+                ).pack(anchor="nw", fill="x", padx=5, pady=1)
+        else:
+            for display_text, key in items:
+                ttk.Radiobutton(
+                    inner_frame,
+                    text=display_text,
+                    variable=variable,
+                    value=key,
+                    command=command
+                ).pack(anchor="nw", fill="x", padx=5, pady=1)
 
         def on_frame_configure(event):
             canvas.configure(scrollregion=canvas.bbox("all"))
@@ -657,8 +891,14 @@ class ControlPanel(tk.Frame):
                 self.body_anim_listbox.insert(tk.END, anim)
 
         self.head_anim_listbox.delete(0, tk.END)
+
+        # Derrick Hand broken skelecog anim fix
+        if self.app.current_cog == "Derrick Hand":
+            head_anims = (anim for anim in head_anims if "skele" not in anim.lower())
+
         for anim in head_anims:
             self.head_anim_listbox.insert(tk.END, anim)
+
 
     def update_prop_lists(self):
         search_term1 = self.prop1_search_entry.get().lower()
@@ -708,7 +948,28 @@ class ControlPanel(tk.Frame):
     def _create_hpr_trace_callback(self, var, axis):
         def trace_callback(*args):
             try:
-                self.app.update_hpr(axis, var.get())
+                value = var.get()
+                self.app.update_head_hpr(axis, value)
+            except tk.TclError:
+                pass
+
+        return trace_callback
+
+    def _create_flatten_trace_callback(self, var, axis):
+        def trace_callback(*args):
+            try:
+                value = var.get()
+                self.app.update_flatten_body(axis, value)
+            except tk.TclError:
+                pass
+
+        return trace_callback
+
+    def _create_flatten_head_trace_callback(self, var, axis):
+        def trace_callback(*args):
+            try:
+                value = var.get()
+                self.app.update_flatten_head(axis, value)
             except tk.TclError:
                 pass
 
@@ -723,9 +984,43 @@ class ControlPanel(tk.Frame):
 
         return trace_callback
 
+    def reset_head_axis(self, axis, var):
+        default_val = self.app.get_head_hpr_default_values()[axis]
+        var.set(default_val)
+        if hasattr(self.app, "store_head_hpr"):
+            self.app.store_head_hpr[axis] = default_val
+
+        self.app.update_head_hpr(axis, default_val)
+
     def reset_head_hpr(self):
-        for var in self.head_hpr_vars.values():
-            var.set(0.0)
+        default = self.app.get_head_hpr_default_values()
+        for axis, var in self.head_hpr_vars.items():
+            var.set(default[axis])
+
+        self.app.store_head_hpr = globals.HEAD_HPR_DEFAULTS.copy()
+
+    def reset_flat_body_axis(self, axis, var):
+        default_val = self.app.cog_data.get("scale", 1.0)
+        var.set(default_val)
+
+        self.app.update_flatten_body(axis, default_val)
+
+    def reset_flat_head_axis(self, axis):
+        default = self.app.cog_data.get("headSize", 1.0)
+        self.flatten_head_vars[axis].set(default)
+        self.app.update_flatten_head(axis, default)
+
+    def reset_flatten(self):
+        default_body = self.app.cog_data.get("scale", 1.0)
+        default_head = self.app.cog_data.get("headSize", 1.0)
+        # Reset Flatten Body
+        for axis, var in self.flatten_body_vars.items():
+            var.set(default_body)
+            self.app.update_flatten_body(axis, default_body)
+        # Reset Flatten Head
+        for axis, var in self.flatten_head_vars.items():
+            var.set(default_head)
+            self.app.update_flatten_head(axis, default_head)
 
     def reset_prop_sliders(self, vars_dict):
         for axis, var in vars_dict.items():
@@ -749,6 +1044,18 @@ class ControlPanel(tk.Frame):
             except tk.TclError:
                 pass
 
+    def show_suit_library(self, show=True):
+        if show:
+            try:
+                self.bottom_notebook.add(self.suit_library_frame, text='Suit Library')
+            except tk.TclError:
+                pass
+        else:
+            try:
+                self.bottom_notebook.hide(self.suit_library_frame)
+            except tk.TclError:
+                pass
+
     def on_cog_select_radio(self):
         cog_name = self.selected_cog_var.get()
         if cog_name:
@@ -764,6 +1071,7 @@ class ControlPanel(tk.Frame):
 
     def on_tie_select_radio(self):
         tie_name = self.selected_tie_var.get()
+        self.app.store_necktie = tie_name
         if tie_name:
             self.app.set_necktie(tie_name)
 
@@ -771,20 +1079,13 @@ class ControlPanel(tk.Frame):
         anim_name = self._get_selected_from_listbox(event)
         if anim_name:
             self.app.set_animation(anim_name)
-            if self.is_autoplay_var.get():  # Autoplay on
-                self.app.play_body_animation()
-            else:  # Autoplay off
-                self.app.stop_body_animation()
+            self.app.check_body_autoplay()
 
     def on_head_anim_select(self, event):
         anim_name = self._get_selected_from_listbox(event)
         if anim_name:
             self.app.set_head_animation(anim_name)
-
-            if self.is_autoplay_var.get():  # Autoplay on
-                self.app.play_head_animation()
-            else:  # Autoplay off
-                self.app.stop_head_animation()
+            self.app.check_head_autoplay()
 
     def on_prop1_select(self, event):
         prop_name = self._get_selected_from_listbox(event)
@@ -795,6 +1096,12 @@ class ControlPanel(tk.Frame):
         prop_name = self._get_selected_from_listbox(event)
         if prop_name:
             self.app.set_prop2(prop_name)
+
+    def show_body_toggle(self, show=True):
+        if show:
+            self.body_toggle_btn.grid()
+        else:
+            self.body_toggle_btn.grid_remove()
 
 
 class CogViewer(ShowBase):
@@ -808,7 +1115,6 @@ class CogViewer(ShowBase):
         self.frame_index = 0
         self.available_props = globals.PROPS_DICT
         self.bool = False
-        self.cog_data = None
         self.actor = None
         self.available_animations = []
         self.available_head_animations = []
@@ -820,21 +1126,23 @@ class CogViewer(ShowBase):
         self.is_body = True  # Used for toggle body
         self.current_animation = "zero"
         self.current_head_animation = "zero"
-        self.current_prop1 = "zero"
         self.previous_prop1 = "zero"
         self.prop_item1 = "zero"
-        self.current_prop2 = "zero"
         self.previous_prop2 = "zero"
         self.prop_item2 = "zero"
         self.last_pose_frame = 0
         self.cog_list = list(globals.COG_DATA)
         self.current_cog_index = 0
         self.current_cog = self.cog_list[self.current_cog_index]
+        self.cog_data = globals.COG_DATA[self.current_cog]
         self.custom_model = None
         self.suit_is_executive = False
         self.suit_is_fired = False
         self.prop_item1_actor = None
         self.prop_item2_actor = None
+        self.splat_stages = []
+        self.suit_type = None
+        self.background_color = (105 / 255, 105 / 255, 105 / 255)
 
         self.control_panel = ControlPanel(self.base.tkRoot, self)
         self.control_panel.setup_custom_model_tab()
@@ -844,6 +1152,7 @@ class CogViewer(ShowBase):
 
         self.skele_i = 0
         self.skele_meter_color = 0
+        self.skele_color_index = 0
         self.flatten_switch = 0
         self.it = 0
         self.it2 = 0
@@ -863,6 +1172,61 @@ class CogViewer(ShowBase):
         self.accept("f10", self.take_screenshot_frames)
         self.accept("control-z", self.reset_camera_pos)
 
+        # Store a bunch of data
+        self.store_head_texture = None
+        self.store_suit_texture = None
+        self.store_skelecog_texture = None
+        self.store_health_meter = False
+        self.store_emblem = "emblem_sales"
+        self.store_necktie = "(Default)"
+        self.store_costume = None
+        self.store_virtualize = False
+        self.store_head_hpr = globals.HEAD_HPR_DEFAULTS.copy()
+        # Stored unique toggles
+        self.store_unique_suit_toggle = False
+        self.store_cycle_slot_l = False
+        self.store_cycle_slot_m = False
+        self.store_cycle_slot_r = False
+        # Stored Body anims
+        self.store_body_anim = None
+        self.store_body_frame = 0
+        self.store_body_loop = False
+        self.store_body_adjusted = False
+        self.store_body_playing = False
+        # Stored Head anims
+        self.store_head_anim = None
+        self.store_head_frame = 0
+        self.store_head_loop = False
+        self.store_head_adjusted = False
+        self.store_head_playing = False
+        # Stored Scale vals
+        self.store_flatten_body = {
+            "Sx": self.cog_data.get("scale", 1.0),
+            "Sy": self.cog_data.get("scale", 1.0),
+            "Sz": self.cog_data.get("scale", 1.0),
+        }
+        self.store_flatten_head = {
+            "Sx": self.cog_data.get("headSize", 1.0),
+            "Sy": self.cog_data.get("headSize", 1.0),
+            "Sz": self.cog_data.get("headSize", 1.0),
+        }
+        # Stored Colors
+        self.store_body_hex_color = None
+        self.store_body_color = False
+        self.store_head_hex_color = None
+        self.store_head_color = False
+        self.store_hand_hex_color = None
+        self.store_hand_color = False
+        # Stored Props
+        self.current_prop1 = "zero"
+        self.current_prop2 = "zero"
+        self.store_prop1 = "zero"
+        self.store_prop2 = "zero"
+        self.store_prop1_hpr = globals.HEAD_HPR_DEFAULTS.copy()
+        self.store_prop2_hpr = globals.HEAD_HPR_DEFAULTS.copy()
+        self.store_custom_model = None
+        self.store_custom_model_hpr = globals.HEAD_HPR_DEFAULTS.copy()
+
     def load_cog(self, cog_name):
         self.current_cog = cog_name
         self.build_cog()
@@ -872,15 +1236,52 @@ class CogViewer(ShowBase):
         except Exception as e:
             print(f"Could not update cog selection: {e}")
 
-    def update_hpr(self, axis, value):
+    def set_POSHPR(self, target, axis, value):
+        POSHPR_DICT = {
+            "x": target.setX,
+            "y": target.setY,
+            "z": target.setZ,
+            "h": target.setH,
+            "p": target.setP,
+            "r": target.setR,
+            "scale": target.setScale
+        }
+        pos = POSHPR_DICT.get(axis)
+        if pos:
+            pos(value)
+
+    def set_depth(self, target, axis, value):
+        # Store scale vals
+        if hasattr(self, "store_flatten_body"):
+            if target == self.actor:
+                self.store_flatten_body[axis] = value
+            else:
+                self.store_flatten_head[axis] = value
+
+        SCALE_DICT = {
+            "Sx": target.setSx,
+            "Sy": target.setSy,
+            "Sz": target.setSz,
+        }
+        func = SCALE_DICT.get(axis)
+        if func:
+            func(value)
+
+    def update_head_hpr(self, axis, value):
         if not hasattr(self, 'head') or self.head.isEmpty():
             return
-        if axis == "h":
-            self.head.setH(value)
-        elif axis == "p":
-            self.head.setP(value)
-        elif axis == "r":
-            self.head.setR(value)
+        self.set_POSHPR(self.head, axis, value)
+        self.store_head_hpr[axis] = value
+
+    def update_flatten_body(self, axis, value):
+        if not hasattr(self, 'actor') or self.actor is None:
+            return
+        self.set_depth(self.actor, axis, value)
+
+    def update_flatten_head(self, axis, value):
+        if not hasattr(self, "head") or self.head.isEmpty():
+            return
+        self.set_depth(self.head, axis, value)
 
     def _get_selected_from_listbox(self, event):
         widget = event.widget
@@ -894,41 +1295,17 @@ class CogViewer(ShowBase):
         item_to_move = self.prop_item1_actor if self.prop_item1_actor else self.prop_item1
 
         if item_to_move != "zero" and not item_to_move.isEmpty():
-            if axis == "x":
-                item_to_move.setX(value)
-            elif axis == "y":
-                item_to_move.setY(value)
-            elif axis == "z":
-                item_to_move.setZ(value)
-            elif axis == "h":
-                item_to_move.setH(value)
-            elif axis == "p":
-                item_to_move.setP(value)
-            elif axis == "r":
-                item_to_move.setR(value)
-            elif axis == "scale":
-                item_to_move.setScale(value)
+            self.set_POSHPR(item_to_move, axis, value)
+            self.store_prop1_hpr[axis] = value
 
     def update_prop2_hpr(self, axis, value):
         item_to_move = self.prop_item2_actor if self.prop_item2_actor else self.prop_item2
 
         if item_to_move != "zero" and not item_to_move.isEmpty():
-            if axis == "x":
-                item_to_move.setX(value)
-            elif axis == "y":
-                item_to_move.setY(value)
-            elif axis == "z":
-                item_to_move.setZ(value)
-            elif axis == "h":
-                item_to_move.setH(value)
-            elif axis == "p":
-                item_to_move.setP(value)
-            elif axis == "r":
-                item_to_move.setR(value)
-            elif axis == "scale":
-                item_to_move.setScale(value)
+            self.set_POSHPR(item_to_move, axis, value)
+            self.store_prop2_hpr[axis] = value
 
-    def set_prop(self, prop):
+    def set_prop(self, prop, check_prop=True):
         if self.prop_item1_actor:
             self.prop_item1_actor.cleanup()
             self.prop_item1_actor.removeNode()
@@ -938,18 +1315,24 @@ class CogViewer(ShowBase):
             self.prop_item1 = "zero"
         self.control_panel.hide_prop_anim_ui(self.control_panel.prop1_anim_frame)
 
-        if self.current_prop1 == prop:
-            # Clicked same prop, toggle off
-            self.current_prop1 = "zero"
-            return
+        if check_prop:
+            if self.current_prop1 == prop:
+                # Clicked same prop, toggle off
+                self.current_prop1 = "zero"
+                self.store_prop1 = "zero"
+                return
 
         self.current_prop1 = prop
+        self.store_prop1 = prop
         prop_data = globals.PROPS_DICT[prop]
 
         if prop_data.get("anims"):
             # It's an animated prop
             self.prop_item1_actor = Actor(prop_data["model"], prop_data["anims"])
-            self.prop_item1_actor.reparentTo(self.actor.find('**/joint_Rhold'))
+            if self.cog_data.get("cog_type") == "boss":
+                self.prop_item1_actor.reparentTo(self.boss_parts["torso"].find('**/joint17'))
+            else:
+                self.prop_item1_actor.reparentTo(self.actor.find('**/joint_Rhold'))
             self.control_panel.setup_prop_anim_ui(
                 self.control_panel.prop1_anim_listbox,
                 self.control_panel.prop1_anim_slider,
@@ -959,7 +1342,10 @@ class CogViewer(ShowBase):
         else:
             # It's a static prop
             self.prop_item1 = loader.loadModel(prop_data["model"])
-            self.prop_item1.reparentTo(self.actor.find('**/joint_Rhold'))
+            if self.cog_data.get("cog_type") == "boss":
+                self.prop_item1.reparentTo(self.boss_parts["torso"].find('**/joint17'))
+            else:
+                self.prop_item1.reparentTo(self.actor.find('**/joint_Rhold'))
 
         if prop == "flintbass":  # i hate this prop
             try:
@@ -972,10 +1358,10 @@ class CogViewer(ShowBase):
                     print(f"Warning: Looked for {texture_path} but didn't find it.")
             except Exception as e:
                 print(f"Error applying flintbass texture: {e}")
+        if check_prop:
+            self.control_panel.reset_prop_sliders(self.control_panel.prop1_vars)
 
-        self.control_panel.reset_prop_sliders(self.control_panel.prop1_vars)
-
-    def set_prop2(self, prop2):
+    def set_prop2(self, prop2, check_prop=True):
         if self.prop_item2_actor:
             self.prop_item2_actor.cleanup()
             self.prop_item2_actor.removeNode()
@@ -985,17 +1371,23 @@ class CogViewer(ShowBase):
             self.prop_item2 = "zero"
         self.control_panel.hide_prop_anim_ui(self.control_panel.prop2_anim_frame)
 
-        if self.current_prop2 == prop2:
-            self.current_prop2 = "zero"
-            return
+        if check_prop:
+            if self.current_prop2 == prop2:
+                self.current_prop2 = "zero"
+                self.store_prop2 = "zero"
+                return
 
         self.current_prop2 = prop2
+        self.store_prop2 = prop2
         prop_data = globals.PROPS_DICT[prop2]
 
         if prop_data.get("anims"):
             # It's an animated prop
             self.prop_item2_actor = Actor(prop_data["model"], prop_data["anims"])
-            self.prop_item2_actor.reparentTo(self.actor.find('**/joint_Lhold'))
+            if self.cog_data.get("cog_type") == "boss":
+                self.prop_item2_actor.reparentTo(self.boss_parts["torso"].find('**/joint17'))
+            else:
+                self.prop_item2_actor.reparentTo(self.actor.find('**/joint_Lhold'))
             self.control_panel.setup_prop_anim_ui(
                 self.control_panel.prop2_anim_listbox,
                 self.control_panel.prop2_anim_slider,
@@ -1005,7 +1397,10 @@ class CogViewer(ShowBase):
         else:
             # It's a static prop
             self.prop_item2 = loader.loadModel(prop_data["model"])
-            self.prop_item2.reparentTo(self.actor.find('**/joint_Lhold'))
+            if self.cog_data.get("cog_type") == "boss":
+                self.prop_item2.reparentTo(self.boss_parts["torso"].find('**/joint17'))
+            else:
+                self.prop_item2.reparentTo(self.actor.find('**/joint_Lhold'))
 
         if prop2 == "flintbass":
             try:
@@ -1018,39 +1413,152 @@ class CogViewer(ShowBase):
                     print(f"Warning: Looked for {texture_path} but didn't find it.")
             except Exception as e:
                 print(f"Error applying flintbass texture: {e}")
+        if check_prop:
+            self.control_panel.reset_prop_sliders(self.control_panel.prop2_vars)
 
-        self.control_panel.reset_prop_sliders(self.control_panel.prop2_vars)
+    def add_pie_splat(self):
+        cog_data = globals.COG_DATA[self.current_cog]
+        if not self.actor: return
+        splat_dir = os.path.join(globals.RESOURCES_DIR, "phase_5", "maps")
+        search_pattern = os.path.join(splat_dir, "splat_*.png")
+
+        possible_splats = glob.glob(search_pattern)
+
+        possible_splats = [f for f in possible_splats if "splat_grayscale.png" not in f]
+        possible_splats = [f for f in possible_splats if "splat_fruit.png" not in f]
+
+        if not possible_splats:
+            print(f"No splat textures found in: {splat_dir}")
+            return
+
+        # 2. Pick a random texture from the found files
+        chosen_path = random.choice(possible_splats)
+
+        # Convert to Panda3D filename to ensure cross-platform compatibility
+        p3d_path = Filename.fromOsSpecific(chosen_path)
+        pie_tex = loader.loadTexture(p3d_path)
+
+        if not pie_tex:
+            print("Failed to load texture.")
+            return
+
+        # 3. Configure Texture Wrapping
+        pie_tex.setWrapU(Texture.WMBorderColor)
+        pie_tex.setWrapV(Texture.WMBorderColor)
+        pie_tex.setBorderColor((0, 0, 0, 0))  # Transparent border
+
+        # 4. Create a unique TextureStage
+        # Sort > 10 ensures it draws on top of the suit texture and previous splats
+        stage_name = f"splatStage_{len(self.splat_stages)}"
+        decal_stage = TextureStage(stage_name)
+        decal_stage.setMode(TextureStage.MDecal)
+        decal_stage.setSort(10 + len(self.splat_stages))
+
+        # 5. Randomize Position and Size
+        # Scale: Higher number = Smaller splat (UV coordinates are inverse)
+        # We vary the scale slightly so they don't all look identical
+        scale_x = random.uniform(0.75, 0.5)
+        scale_y = random.uniform(0.75, 0.5)
+        offset_x = random.uniform(0.0, 0.50)
+        offset_y = random.uniform(0.0, 0.25)
+
+        # 6. Apply to the Body node
+        if cog_data["suit"] in ["boss"]:
+            body = self.boss_parts["torso"]
+        else:
+            body = self.actor.find('**/body')
+        if not body.isEmpty():
+            body.setTexture(decal_stage, pie_tex)
+            body.setTexScale(decal_stage, scale_x, scale_y)
+            body.setTexOffset(decal_stage, offset_x, offset_y)
+
+            self.splat_stages.append(decal_stage)
+
+        head = self.head
+        if not head.isEmpty():
+            head.setTexture(decal_stage, pie_tex)
+            head.setTexScale(decal_stage, scale_x, scale_y)
+            head.setTexOffset(decal_stage, offset_x, offset_y)
+
+            self.splat_stages.append(decal_stage)
+
+    def clear_pie_splats(self):
+        cog_data = globals.COG_DATA[self.current_cog]
+        if not self.actor: return
+
+        if cog_data["suit"] in ["boss"]:
+            body = self.boss_parts["torso"]
+        else:
+            body = self.actor.find('**/body')
+        if not body.isEmpty():
+            for stage in self.splat_stages:
+                body.clearTexture(stage)
+        head = self.head
+        if not head.isEmpty():
+            for stage in self.splat_stages:
+                head.clearTexture(stage)
+
+        self.splat_stages = []
 
     def set_head_animation(self, animation):
         self.current_head_animation = animation
         self.head.loop(animation)
         self.is_posed = False
 
+        if self.current_head_animation != self.store_head_anim:
+            self.store_head_frame = 0
+            self.store_head_adjusted = False
+
         try:
             num_frames = self.head.getNumFrames(self.current_head_animation)
             self.control_panel.update_anim_slider_range("head", num_frames)
+            self.store_head_anim = self.current_head_animation
         except:
             self.control_panel.update_anim_slider_range("head", 0)
+            self.store_head_anim = None
 
     def set_animation(self, animation):
         self.current_animation = animation
         self.actor.loop(animation)
         self.is_posed = False
 
+        if self.current_animation != self.store_body_anim:
+            self.store_body_frame = 0
+            self.store_body_adjusted = False
+
         try:
             num_frames = self.actor.getNumFrames(self.current_animation)
             self.control_panel.update_anim_slider_range("body", num_frames)
+            self.store_body_anim = self.current_animation
         except:
             self.control_panel.update_anim_slider_range("body", 0)
+            self.store_body_anim = None
+
+    def check_body_autoplay(self):
+        if self.control_panel.is_autoplay_var.get():  # Autoplay on
+            self.play_body_animation()
+        else:  # Autoplay off
+            self.stop_body_animation()
+
+    def check_head_autoplay(self):
+        if self.control_panel.is_autoplay_var.get():  # Autoplay on
+            self.play_head_animation()
+        else:  # Autoplay off
+            self.stop_head_animation()
 
     def take_screenshot(self):
+        cog_data = globals.COG_DATA[self.current_cog]
         path = globals.SCREENSHOT_DIR
         if not os.path.exists(path):
             os.makedirs(path)
         now = datetime.now()
         date_string = now.strftime("%d-%m-%Y-%H-%M-%S")
-        screenshot_name = os.path.join(path, "ss-{}-{}.png".format(self.current_cog, date_string))
+        screenshot_name = os.path.join(path, "ss-{}-{}.png".format(cog_data["cog"], date_string))
+        self.setBackgroundColor(0, 0, 0)
+        self.graphicsEngine.renderFrame()
+        self.graphicsEngine.renderFrame()
         self.base.screenshot(screenshot_name, False)
+        self.setBackgroundColor(self.background_color)
 
     def toggle_background(self):
         self.bool = self.control_panel.is_background_black_var.get()
@@ -1075,7 +1583,11 @@ class CogViewer(ShowBase):
 
     def reset_actor_pos(self):
         if self.actor:
-            self.actor.setPosHpr(*globals.DEFAULT_POS, *globals.DEFAULT_HPR)
+            # Check if the current loaded cog is a boss
+            if self.cog_data.get("cog_type") == "boss":
+                self.actor.setH(0)
+            else:
+                self.actor.setH(180)
 
     def reset_camera_pos(self):
         self.disable_mouse_cam()
@@ -1083,22 +1595,60 @@ class CogViewer(ShowBase):
         self.enable_mouse_cam()
 
     def play_body_animation(self):
-        if self.actor and self.current_animation != "zero":
+        if self.current_animation != "zero":
             self.is_posed = False
-            if self.control_panel.loop_body_var.get():
-                self.actor.loop(self.current_animation)
-            else:
-                self.actor.play(self.current_animation)
+            self.store_body_adjusted = False
+            self.store_body_playing = True
+            self.store_body_frame = 0
+
+            # Check if this is a Boss Cog
+            if self.cog_data.get("cog_type") == "boss" and hasattr(self, "boss_parts"):
+                # Loop through all parts (legs, torso) but exclude the head
+                for part_name, part_actor in self.boss_parts.items():
+                    if part_name == "head": continue  # Head is controlled separately
+
+                    if isinstance(part_actor, Actor):
+                        # Use try/except or check valid animations to prevent crashing
+                        # if a specific part doesn't share the animation name
+                        if self.control_panel.loop_body_var.get():
+                            part_actor.loop(self.current_animation)
+                        else:
+                            part_actor.play(self.current_animation)
+
+            # Standard Cog behavior
+            elif self.actor:
+                if self.control_panel.loop_body_var.get():
+                    self.actor.loop(self.current_animation)
+                else:
+                    self.actor.play(self.current_animation)
 
     def stop_body_animation(self):
-        if self.actor and self.current_animation != "zero":
+        if self.current_animation != "zero":
             self.is_posed = True
-            self.actor.pose(self.current_animation, 0)
+            self.store_body_adjusted = True
+            self.store_body_playing = False
+            self.store_body_frame = 0
+
+            # Boss Cog Behavior
+            if self.cog_data.get("cog_type") == "boss" and hasattr(self, "boss_parts"):
+                for part_name, part_actor in self.boss_parts.items():
+                    if part_name == "head": continue
+                    if isinstance(part_actor, Actor):
+                        part_actor.pose(self.current_animation, 0)
+
+            # Standard Cog Behavior
+            elif self.actor:
+                self.actor.pose(self.current_animation, 0)
+
             self.control_panel.body_frame_slider.set(0)
 
     def play_head_animation(self):
         if hasattr(self, 'head') and self.head and self.current_head_animation != "zero":
             self.is_posed = False
+            self.store_head_adjusted = False
+            self.store_head_playing = True
+            self.store_head_frame = 0
+
             if self.control_panel.loop_head_var.get():
                 self.head.loop(self.current_head_animation)
             else:
@@ -1107,6 +1657,10 @@ class CogViewer(ShowBase):
     def stop_head_animation(self):
         if hasattr(self, 'head') and self.head and self.current_head_animation != "zero":
             self.is_posed = True
+            self.store_head_adjusted = True
+            self.store_head_playing = False
+            self.store_head_frame = 0
+
             self.head.pose(self.current_head_animation, 0)
             self.control_panel.head_frame_slider.set(0)
 
@@ -1133,6 +1687,7 @@ class CogViewer(ShowBase):
         else:
             self.prop_item1_actor.play(anim_name)
         self.prop_item1_actor.setBlend(frameBlend=self.is_blend)
+        self.prop_item1_actor.setTwoSided(True)
 
     def stop_prop1_animation(self):
         if self.prop_item1_actor and self.prop_item1_actor.getCurrentAnim():
@@ -1168,6 +1723,7 @@ class CogViewer(ShowBase):
         else:
             self.prop_item2_actor.play(anim_name)
         self.prop_item2_actor.setBlend(frameBlend=self.is_blend)
+        self.prop_item2_actor.setTwoSided(True)
 
     def stop_prop2_animation(self):
         if self.prop_item2_actor and self.prop_item2_actor.getCurrentAnim():
@@ -1188,61 +1744,66 @@ class CogViewer(ShowBase):
         if hasattr(self, 'head') and self.head:
             self.head.setBlend(frameBlend=self.is_blend)
 
-    def build_cog(self):
+    def build_cog(self, suit_type=None, refresh_cog=True):
         pos = (0, 0, 0)
         hpr = (180, 0, 0)
 
-        self.skele_i = 0
         self.skele_meter_color = 0
         self.flatten_switch = 0
-        self.it = 0
-        self.it2 = 0
-        self.it_l, self.it_m, self.it_r = 0, 0, 0
 
         self.current_head_animation = "zero"
         self.current_animation = "zero"
         self.is_posed = False
+        self.control_panel.show_suit_library(True)
+        self.control_panel.show_body_toggle(True)
 
         if not self.actor == None:
             pos = self.actor.getPos()
-            hpr = self.actor.getHpr()
+            current_hpr = self.actor.getHpr()
+
+            # --- FIX START: Check if the previous Cog was a Boss ---
+            prev_is_boss = False
+            if self.cog_data:
+                prev_is_boss = self.cog_data.get("cog_type") == "boss"
+
+            # If we are coming from a Boss Cog, reset the rotation to default (180).
+            # Otherwise, preserve the current rotation (e.g. browsing standard cogs).
+            if prev_is_boss:
+                hpr = globals.DEFAULT_HPR
+            else:
+                hpr = current_hpr
+            # --- FIX END ---
+
             self.actor.cleanup()
             self.actor.removeNode()
 
-        body_path = ""
-        body_animations = {}
+        if hasattr(self, 'boss_parts'):  # Cleanup old boss parts
+            for part in self.boss_parts.values():
+                if isinstance(part, Actor): part.cleanup()
+                part.removeNode()
+        self.boss_parts = {}  # Reset
 
         head_path = ""
         head_animations = {}
 
         cog_data = globals.COG_DATA[self.current_cog]
         self.cog_data = cog_data
-        suit_type = cog_data["suit"]
         dept = cog_data["dept"]
-        body_path = globals.SUIT_MODEL_DICT.get(suit_type, None)
 
-        if body_path is None:
-            print(f"Warning: Suit type '{suit_type}' not recognized.")
+        self.clear_pie_splats()
 
-        if (suit_type in ["a", "af", "hr", "as", "mph", "cch", "erfit"]):
-            body_animations = globals.SUIT_A_ANIMATION_DICT
-            self.available_animations = globals.SUIT_A_ANIMATIONS
-        elif (suit_type in ["b", "bf", "bc", "ps", "rm", "bs"]):
-            body_animations = globals.SUIT_B_ANIMATION_DICT
-            self.available_animations = globals.SUIT_B_ANIMATIONS
-        elif (suit_type in ["c", "cf", "cs"]):
-            body_animations = globals.SUIT_C_ANIMATION_DICT
-            self.available_animations = globals.SUIT_C_ANIMATIONS
-        elif (suit_type in ["bossCog"]):
-            body_animations = globals.BOSS_COG_ANIMATION_DICT
-            self.available_animations = globals.BOSS_COG_ANIMATIONS
+        if suit_type == None:
+            suit_type = self.cog_data["suit"]
 
-        self.actor = Actor(body_path, body_animations)
-        self.shadow.reparentTo(self.actor.find('**/joint_shadow'))
+        if cog_data.get("cog_type") == "boss":
+            self.build_boss_cog(cog_data)
+            return
+
+        self.build_body(suit_type)
 
         ##### SET SUIT/NECKTIE TEXTURE ########################################
         tx_suit = loader.loadTexture(cog_data["suitTex"])
-        if cog_data["cog"] == ["counterfit"] or cog_data['name'] in ["ttcc_ene_counterfit"]:
+        if suit_type in ["erfit"] or cog_data['name'] in ["ttcc_ene_counterfit"]:
             self.actor.find('**/body').setTexture(tx_suit, 1)
         else:
             self.actor.find('**/body').setTexture(tx_suit, 1)
@@ -1251,16 +1812,23 @@ class CogViewer(ShowBase):
             self.actor.find('**/bowtie').setTexture(tx_suit, 1)
 
         # Fix for Bellringer & Insider, set their hand textures
-        if cog_data["suit"] == "bc":
+        if suit_type == "bc":
             self.actor.find('**/hands').setTexture(tx_suit, 1)
 
         if (suit_type == "mph"):
-            tx_body = loader.loadTexture(cog_data["bodyTex"])
+            tx_body = loader.loadTexture(globals.MP_BODY)
             self.actor.find('**/bowtie').setTexture(tx_body, 1)
             self.actor.find('**/highroller_body').setTexture(tx_body, 1)
 
         # Call build_necktie function
-        self.build_necktie()
+        if suit_type not in globals.NO_NECKTIE_SUITS:
+            self.build_necktie()
+        else:
+            self.control_panel.hide_tie_list()
+            if suit_type not in ["erfit"]:
+                self.actor.find('**/necktie-s').hide()  # Hide Sellbot necktie
+                self.actor.find('**/necktie-w').hide()  # Hide Cash/Boss/Board necktie
+                self.actor.find('**/bowtie').hide()  # Hide Law bowtie
 
         self.head = loader.loadModel(cog_data["head"])
 
@@ -1287,16 +1855,10 @@ class CogViewer(ShowBase):
             self.iconbase.find('**/emblem_corp').hide()
             self.iconbase.find('**/emblem_board').hide()
 
-            # If our actor is High Roller, hide the emblem
-            if suit_type == "hr":
-                self.iconbase.hide()
-
             emblem = cog_data["emblem"]
             self.iconbase.find(f'**/{emblem}').show()
 
-            # self.iconbase = iconbase
-
-            if suit_type in ["a", "af", "cch", "mph"]:
+            if suit_type in ["a", "af", "cch", "mph", "hr"]:
                 self.iconbase.setY(-0.10)
             elif suit_type in ["c"]:
                 self.iconbase.setY(0.10)
@@ -1308,6 +1870,10 @@ class CogViewer(ShowBase):
                 self.iconbase.setPosHprScale(0.00, 0.04, 0.00, 180.00, 349.70, 0.00, 1.00, 1.00, 1.00)
             else:
                 self.iconbase.setY(0.00)
+
+            # If our actor is High Roller, hide the emblem
+            if suit_type is "hr":
+                self.iconbase.hide()
 
         # If they are a skelecog:
         else:
@@ -1395,14 +1961,11 @@ class CogViewer(ShowBase):
         self.shadow.show()
         self.is_costume_active = False
         self.control_panel.is_body_var.set(True)
-        self.control_panel.is_flattened_var.set(False)
         self.control_panel.is_costume_var.set(False)
         self.control_panel.is_executive_var.set(False)
         self.control_panel.is_fired_var.set(False)
         self.control_panel.is_waiter_var.set(False)
         self.is_body = True
-
-        self.control_panel.reset_head_hpr()
 
         if self.cog_data.get("hasHalloween") == 1:
             self.control_panel.costume_button.grid()
@@ -1427,7 +1990,7 @@ class CogViewer(ShowBase):
             if dept == "c":
                 self.control_panel.suit_waiter_check.pack(anchor="w", padx=5)
 
-        if suitToggle in ["hr", "rm", "dj", "u", "cch", "chainsaw"]:
+        if suitToggle in ["hr", "rm", "dj", "u", "cch", "chainsaw", "ms"]:
             # Show unique cycle button
             self.control_panel.unique_suit_button.pack(anchor="w", fill="x", padx=5, pady=5)
 
@@ -1446,24 +2009,49 @@ class CogViewer(ShowBase):
 
         self.control_panel.selected_tie_var.set("(Default)")
 
+        # Used to refresh the store variables used for apply suit model function
+        if refresh_cog:
+            self.reset_stored_vals()
+
+    def build_body(self, suit_type):
+        body_path = ""
+        body_animations = {}
+
+        body_path = globals.SUIT_MODEL_DICT.get(suit_type, None)
+
+        if body_path is None:
+            print(f"Warning: Suit type '{suit_type}' not recognized.")
+
+        if (suit_type in ["a", "af", "hr", "as", "mph", "cch", "erfit"]):
+            body_animations = globals.SUIT_A_ANIMATION_DICT
+            self.available_animations = globals.SUIT_A_ANIMATIONS
+        elif (suit_type in ["b", "bf", "bc", "ps", "rm", "bs"]):
+            body_animations = globals.SUIT_B_ANIMATION_DICT
+            self.available_animations = globals.SUIT_B_ANIMATIONS
+        elif (suit_type in ["c", "cf", "cs"]):
+            body_animations = globals.SUIT_C_ANIMATION_DICT
+            self.available_animations = globals.SUIT_C_ANIMATIONS
+        elif (suit_type in ["bossCog"]):
+            body_animations = globals.BOSS_COG_ANIMATION_DICT
+            self.available_animations = globals.BOSS_COG_ANIMATIONS
+
+        self.actor = Actor(body_path, body_animations)
+        self.shadow.reparentTo(self.actor.find('**/joint_shadow'))
+
     def build_necktie(self):
         cog_data = self.cog_data
-        self.control_panel.hide_tie_list()
+        self.control_panel.show_tie_list()
 
-        if cog_data["suit"] not in ["erfit"]:  # Make sure it's not Erfit, as his suit doesn't have tie geomnodes
-            # We hide the neckties by default, then re-enable them for departments
-            self.actor.find('**/necktie-s').hide()  # Hide Sellbot necktie
-            self.actor.find('**/necktie-w').hide()  # Hide Cash/Boss/Board necktie
-            self.actor.find('**/bowtie').hide()  # Hide Law bowtie
+        # We hide the neckties by default, then re-enable them for departments
+        self.actor.find('**/necktie-s').hide()  # Hide Sellbot necktie
+        self.actor.find('**/necktie-w').hide()  # Hide Cash/Boss/Board necktie
+        self.actor.find('**/bowtie').hide()  # Hide Law bowtie
 
-            # Tieless Cogs
-            if cog_data["cog"] not in globals.NO_NECKTIE_COGS:
-                if self.control_panel.tie_options_hidden_var:
-                    self.control_panel.show_tie_list()
-                necktie_map = globals.NECKTIE_MAP
-                necktie = necktie_map.get(cog_data["cog"]) or necktie_map.get(
-                    cog_data["dept"])  # Search by cog name or department
-                self.actor.find(necktie).show()  # Find the appropriate necktie and unhide it
+        if cog_data["cog"] not in globals.NO_NECKTIE_COGS:
+            necktie_map = globals.NECKTIE_MAP
+            necktie = necktie_map.get(cog_data["cog"]) or necktie_map.get(
+                cog_data["dept"])  # Search by cog name or department
+            self.actor.find(necktie).show()  # Find the appropriate necktie and unhide it
 
     def set_suit_texture(self, trigger=None):
         """Applies Executive, Fired, or Waiter textures."""
@@ -1472,6 +2060,8 @@ class CogViewer(ShowBase):
         is_exec = self.control_panel.is_executive_var.get()
         is_fired = self.control_panel.is_fired_var.get()
         is_waiter = self.control_panel.is_waiter_var.get()
+        is_skelecog = self.suit_type in ["as", "bs", "cs"]
+        not_erfit = self.suit_type != "erfit"
 
         if trigger == "fired" and is_fired:
             self.control_panel.is_executive_var.set(False)
@@ -1487,14 +2077,22 @@ class CogViewer(ShowBase):
             self.control_panel.is_fired_var.set(False)
             is_fired = False
 
+        # Waiter bowtie:
+        if not is_skelecog and not_erfit:
+            if is_waiter:
+                self.actor.find('**/bowtie').show()
+                self.actor.find('**/necktie-s').hide()
+                self.actor.find('**/necktie-w').hide()
+            else:
+                self.control_panel.on_tie_select_radio()
+
         cog_name = self.cog_data["name"]
         dept = self.cog_data["dept"]
-        suitToggle = self.cog_data.get("suitToggle")
 
         paths = globals.SUIT_TEXTURE_PATH
 
         tex_key = dept
-        if suitToggle == "s":
+        if is_skelecog:
             tex_key = dept + "s"
         elif cog_name in paths:
             tex_key = cog_name
@@ -1502,29 +2100,41 @@ class CogViewer(ShowBase):
         tex_list = paths.get(tex_key)
         if not tex_list: return
 
-        tex_to_apply = tex_list[0]  # Default
+        tex_index = 0  # Default
 
         if is_fired:
-            tex_to_apply = tex_list[-1]
+            tex_index = -1
 
         elif is_waiter and tex_key in ["c", "cs"] and len(tex_list) > 3:
             if is_exec:
-                tex_to_apply = tex_list[3]  # Waiter Executive
+                tex_index = 3
             else:
-                tex_to_apply = tex_list[2]  # Waiter (Normal)
+                tex_index = 2
 
         elif is_exec and len(tex_list) > 1:
-            tex_to_apply = tex_list[1]  # Standard Executive
+            tex_index = 1
 
         # Apply the texture
+        tex_to_apply = tex_list[tex_index]
         tx_suit = loader.loadTexture(tex_to_apply)
         self.actor.find('**/body').setTexture(tx_suit, 1)
-        self.actor.find('**/necktie-s').setTexture(tx_suit, 1)
-        self.actor.find('**/necktie-w').setTexture(tx_suit, 1)
-        self.actor.find('**/bowtie').setTexture(tx_suit, 1)
+        if not_erfit:
+            self.actor.find('**/necktie-s').setTexture(tx_suit, 1)
+            self.actor.find('**/necktie-w').setTexture(tx_suit, 1)
+            self.actor.find('**/bowtie').setTexture(tx_suit, 1)
 
-        if suitToggle == "s":
+        if not is_skelecog:
+            self.store_suit_texture = tex_to_apply
+        else:
+            self.store_skelecog_texture = tex_to_apply
+
+        if self.cog_data["suitToggle"] in ["s"]:
+            tex_key = dept + "s"
+            tex_list = paths.get(tex_key)
+            tex_to_apply = tex_list[tex_index]
+            tx_suit = loader.loadTexture(tex_to_apply)
             self.head.setTexture(tx_suit, 1)  # Skelecogs
+            self.store_head_texture = tex_to_apply
 
         elif cog_name in ["cc_a_ene_bagholder", "cc_a_ene_insider", "cc_a_ene_headhoncho"]:  # stupid boardbots
             head_tex_list = globals.HEAD_TEXTURE_PATH.get(tex_key)
@@ -1535,33 +2145,22 @@ class CogViewer(ShowBase):
                 elif is_exec:
                     head_tex = head_tex_list[1]
                 self.head.setTexture(loader.loadTexture(head_tex), 1)
+                self.store_head_texture = head_tex
 
-    def toggle_unique_suit(self):
+    def toggle_unique_suit(self, iterate=True):
         """Handles the 'cycle' button for unique suit toggles."""
         if not self.cog_data: return
 
+        self.store_unique_suit_toggle = True
         cog_name = self.cog_data["name"]
         suitToggle = self.cog_data.get("suitToggle")
 
-        if suitToggle == "u":
+        # Chainsaw Consultant
+        if suitToggle == "chainsaw":
             suit_paths = globals.SUIT_TEXTURE_PATH.get(cog_name)
             head_paths = globals.HEAD_TEXTURE_PATH.get(cog_name)
-            self.it = (self.it + 1) % len(suit_paths)
-            tx_suit = loader.loadTexture(suit_paths[self.it])
-            tx_head = loader.loadTexture(head_paths[self.it])
-            self.actor.find('**/body').setTexture(tx_suit, 1)
-            self.actor.find('**/necktie-w').setTexture(tx_suit, 1)
-            self.head.setTexture(tx_head, 1)
-            if cog_name in ["ttcc_ene_chainsaw", "ttcc_ene_chainsaw_hw"]:
-                if self.it > 1:
-                    self.head.find('**/bulbLeft').hide()
-                else:
-                    self.head.find('**/bulbLeft').show()
-
-        elif suitToggle == "chainsaw":
-            suit_paths = globals.SUIT_TEXTURE_PATH.get(cog_name)
-            head_paths = globals.HEAD_TEXTURE_PATH.get(cog_name)
-            self.it = (self.it + 1) % len(suit_paths)
+            if iterate:
+                self.it = (self.it + 1) % len(suit_paths)
             tx_suit = loader.loadTexture(suit_paths[self.it])
             tx_head = loader.loadTexture(head_paths[self.it])
             self.actor.find('**/body').setTexture(tx_suit, 1)
@@ -1572,10 +2171,12 @@ class CogViewer(ShowBase):
             else:
                 self.head.find('**/bulbLeft').show()
 
+        # Chainsaw Consultant (Halloween)
         elif suitToggle == "cch":
             suit_paths = globals.SUIT_TEXTURE_PATH.get(cog_name)
             head_paths = globals.HEAD_TEXTURE_PATH.get(cog_name)
-            self.it = (self.it + 1) % len(suit_paths)
+            if iterate:
+                self.it = (self.it + 1) % len(suit_paths)
             tx_head = loader.loadTexture(head_paths[self.it])
             self.head.setTexture(tx_head, 1)
             if self.it > 1:
@@ -1583,75 +2184,106 @@ class CogViewer(ShowBase):
             else:
                 self.head.find('**/bulbLeft').show()
 
+        # Multislacker
+        elif suitToggle == "ms":
+            suit_paths = globals.SUIT_TEXTURE_PATH.get(cog_name)
+            head_paths = globals.HEAD_TEXTURE_PATH.get(cog_name)
+            if iterate:
+                self.it = (self.it + 1) % len(suit_paths)
+            tx_head = loader.loadTexture(head_paths[self.it])
+            self.head.setTexture(tx_head, 1)
+            self.store_head_texture = head_paths[self.it]
+
+        # High Roller
         elif suitToggle == "hr":
             suit_paths = globals.SUIT_TEXTURE_PATH.get("hr")
             body_paths = globals.HEAD_TEXTURE_PATH.get("hr")
-            self.it = (self.it + 1) % len(suit_paths)
+            if iterate:
+                self.it = (self.it + 1) % len(suit_paths)
             tx_suit = loader.loadTexture(suit_paths[self.it])
             tx_body = loader.loadTexture(body_paths[self.it])
             self.actor.find('**/body').setTexture(tx_suit, 1)
-            self.actor.find('**/highroller_body').setTexture(tx_body, 1)
+            # check if the suit has the high roller model
+            if self.suit_type in ["hr"]:
+                self.actor.find('**/highroller_body').setTexture(tx_body, 1)
+            self.store_suit_texture = suit_paths[self.it]
 
+        # Rainmaker
         elif suitToggle == "rm":
             for Hair in self.head.findAllTextureStages("*hair"):
-                self.it2 += 0.2
+                if iterate:
+                    self.it2 += 0.2
                 if self.it2 == 1: self.it2 = 0
                 self.head.setTexOffset(Hair, 0, self.it2)
 
+        # Desk Jockey
         elif suitToggle == "dj":
             suit_paths = globals.SUIT_TEXTURE_PATH.get("dj")
             self.it = (self.it + 1) % len(suit_paths)
             tx_suit = loader.loadTexture(suit_paths[self.it])
             self.actor.find('**/body').setTexture(tx_suit, 1)
             self.actor.find('**/bowtie').setTexture(tx_suit, 1)
+            self.store_suit_texture = suit_paths[self.it]
 
-    def cycle_slot_l(self):
+    def cycle_slot_l(self, iterate=True):
         if not self.head or self.head.isEmpty(): return
+        self.store_cycle_slot_l = True
         slotL = self.head.find('**/slotL')
         if not slotL.isEmpty():
-            self.it_l = (self.it_l + 0.25) % 1.0
+            if iterate:
+                self.it_l = (self.it_l + 0.25) % 1.0
             slotL.setTexOffset(TextureStage.getDefault(), 0, self.it_l)
 
-    def cycle_slot_m(self):
+    def cycle_slot_m(self, iterate=True):
         if not self.head or self.head.isEmpty(): return
+        self.store_cycle_slot_m = True
         slotM = self.head.find('**/slotMid')
         if not slotM.isEmpty():
-            self.it_m = (self.it_m + 0.25) % 1.0
+            if iterate:
+                self.it_m = (self.it_m + 0.25) % 1.0
             slotM.setTexOffset(TextureStage.getDefault(), 0, self.it_m)
 
-    def cycle_slot_r(self):
+    def cycle_slot_r(self, iterate=True):
         if not self.head or self.head.isEmpty(): return
+        self.store_cycle_slot_r = True
         slotR = self.head.find('**/slotR')
         if not slotR.isEmpty():
-            self.it_r = (self.it_r + 0.25) % 1.0
+            if iterate:
+                self.it_r = (self.it_r + 0.25) % 1.0
             slotR.setTexOffset(TextureStage.getDefault(), 0, self.it_r)
 
     def set_necktie(self, override=None):
+        if self.suit_type in ["erfit"]:
+            return
+
         cog_data = self.cog_data
 
         self.actor.find('**/necktie-s').hide()
         self.actor.find('**/necktie-w').hide()
         self.actor.find('**/bowtie').hide()
 
-        if cog_data["cog"] in globals.NO_NECKTIE_COGS:
-            return
-
         tie_to_show = None
         if override and override != "(Default)":
-            if override == "Skinny Tie":
-                tie_to_show = "**/necktie-s"
-            elif override == "Wide Tie":
-                tie_to_show = "**/necktie-w"
-            elif override == "Bowtie":
-                tie_to_show = "**/bowtie"
-            elif override == "None":
+            tie_override = {
+                "Thin Tie": "**/necktie-s",
+                "Wide Tie": "**/necktie-w",
+                "Bowtie": "**/bowtie",
+            }
+            if override == "None":
                 return
+            tie_to_show = tie_override.get(override)
         else:
-            necktie_map = globals.NECKTIE_MAP
-            tie_to_show = necktie_map.get(cog_data["cog"]) or necktie_map.get(cog_data["dept"])
+            if cog_data["cog"] in globals.NO_NECKTIE_COGS:
+                return
+            else:
+                necktie_map = globals.NECKTIE_MAP
+                tie_to_show = necktie_map.get(cog_data["cog"]) or necktie_map.get(cog_data["dept"])
 
         if tie_to_show:
             self.actor.find(tie_to_show).show()
+
+        if self.suit_type in globals.NO_NECKTIE_SUITS:
+            self.actor.find(tie_to_show).hide()
 
     def _swap_head_model(self, new_model_path):
         if not new_model_path or not os.path.isfile(new_model_path):
@@ -1690,7 +2322,7 @@ class CogViewer(ShowBase):
 
         return new_head
 
-    def toggle_costume(self):  # Toggle halloween costumes for managers
+    def toggle_costume(self, check_stored=True):  # Toggle halloween costumes for managers
         cog_data = globals.COG_DATA.get(self.current_cog, None)
         if not cog_data: return
 
@@ -1715,8 +2347,12 @@ class CogViewer(ShowBase):
         if not self.is_costume_active:
 
             if hw_head_model_path and os.path.isfile(hw_head_model_path):
+                if check_stored:
+                    self.set_stored_vals()
                 self.head.detachNode()
                 self.head = self._swap_head_model(hw_head_model_path)
+                if check_stored:
+                    self.update_cog_attributes(None, True)
 
             head_tex_path = get_valid_texture_path(cog_data.get("headTex_HW"))
             if head_tex_path:
@@ -1774,7 +2410,7 @@ class CogViewer(ShowBase):
                         if not np.isEmpty():
                             np.setTexture(hw_suit_tex, 1)
 
-            if (suit_type not in ["as", "bs", "cs", "bossCog"]):
+            if self.suit_type not in ["as", "bs", "cs", "boss"]:
                 if "handsHW" in cog_data:
                     self.actor.find('**/hands').setColor(cog_data["handsHW"])
 
@@ -1783,8 +2419,10 @@ class CogViewer(ShowBase):
         # Toggle OFF
         else:
             if hw_head_model_path and os.path.isfile(hw_head_model_path):
+                self.set_stored_vals()
                 self.head.detachNode()
                 self.head = self._swap_head_model(cog_data.get("head"))
+                self.update_cog_attributes(None, True)
 
             if "ttcc_ene_rainmaker" in cog_name:
                 rainHW = loader.loadTexture(cog_data.get("headTex1"))
@@ -1826,7 +2464,7 @@ class CogViewer(ShowBase):
             if suit_tex_path:
                 normal_suit_tex = loader.loadTexture(suit_tex_path)
                 if (suit_type == "mph"):
-                    tx_body_normal = loader.loadTexture(cog_data["bodyTex"])
+                    tx_body_normal = loader.loadTexture(globals.MP_BODY)
                     self.actor.find('**/bowtie').setTexture(tx_body_normal, 1)
                     self.actor.find('**/highroller_body').setTexture(tx_body_normal, 1)
                     self.actor.find('**/body').setTexture(normal_suit_tex, 1)
@@ -1852,7 +2490,8 @@ class CogViewer(ShowBase):
             self.actor.find('**/body').hide()  # Hiding body & all suit parts
             self.actor.find("**/joint_attachMeter").hide()
             if self.cog_data["cog"] not in [
-                "counterfit"]:  # Make sure the cog isn't Count Erfit (he lacks necktie geomnodes)
+                "counterfit", "VP", "CFO", "CLO",
+                "CEO"]:  # Make sure the cog isn't Count Erfit (he lacks necktie geomnodes)
                 self.actor.find('**/necktie-s').hide()
                 self.actor.find('**/necktie-w').hide()
                 self.actor.find('**/bowtie').hide()
@@ -1869,6 +2508,25 @@ class CogViewer(ShowBase):
                 self.actor.find('**/glow').hide()  # Hides the hp light glow
             self.is_body = False  # Flip bool var to true for show body
 
+            self.control_panel.is_body_var.set(self.is_body)  # Update the tkpanel status
+            self.control_panel.is_background_black_var.set(self.bool)
+            self.control_panel.is_executive_var.set(False)
+            self.control_panel.is_fired_var.set(False)
+
+            # Hide props
+            if self.prop_item1_actor: self.prop_item1_actor.cleanup()
+            if self.prop_item2_actor: self.prop_item2_actor.cleanup()
+            if self.prop_item1 != "zero": self.prop_item1.removeNode()
+            if self.prop_item2 != "zero": self.prop_item2.removeNode()
+            self.prop_item1_actor = None
+            self.prop_item2_actor = None
+            self.prop_item1 = "zero"
+            self.prop_item2 = "zero"
+            self.current_prop1 = "zero"
+            self.current_prop2 = "zero"
+            self.control_panel.hide_prop_anim_ui(self.control_panel.prop1_anim_frame)
+            self.control_panel.hide_prop_anim_ui(self.control_panel.prop2_anim_frame)
+
         # SHOW BODY
         else:
             self.actor.find('**/body').show()  # Show the body
@@ -1884,27 +2542,12 @@ class CogViewer(ShowBase):
             else:  # Show Body (Skelecog)
                 self.actor.find("**/emblem_healthmeter").show()  # Shows the skelecog hp light
                 self.actor.find('**/glow').show()  # Shows the glow
-            self.set_necktie(override=None)  # Set default tie
+            tie_to_set = self.control_panel.selected_tie_var.get()
+            self.set_necktie(tie_to_set)
             self.is_body = True  # Flip bool var to false for hide body
-            self.control_panel.selected_tie_var.set("(Default)")
 
-        self.control_panel.is_body_var.set(self.is_body)  # Update the tkpanel status
-        self.control_panel.is_background_black_var.set(self.bool)
-        self.control_panel.is_executive_var.set(False)
-        self.control_panel.is_fired_var.set(False)
+            self.load_stored_props()
 
-        if self.prop_item1_actor: self.prop_item1_actor.cleanup()
-        if self.prop_item2_actor: self.prop_item2_actor.cleanup()
-        if self.prop_item1 != "zero": self.prop_item1.removeNode()
-        if self.prop_item2 != "zero": self.prop_item2.removeNode()
-        self.prop_item1_actor = None
-        self.prop_item2_actor = None
-        self.prop_item1 = "zero"
-        self.prop_item2 = "zero"
-        self.current_prop1 = "zero"
-        self.current_prop2 = "zero"
-        self.control_panel.hide_prop_anim_ui(self.control_panel.prop1_anim_frame)
-        self.control_panel.hide_prop_anim_ui(self.control_panel.prop2_anim_frame)
 
     def toggle_shadow(self):
         self.is_shadow = not self.is_shadow
@@ -1914,10 +2557,256 @@ class CogViewer(ShowBase):
         else:
             self.shadow.hide()
 
+    def hex_to_p3d_color(self, hex_code):
+        try:
+            hex_code = hex_code.lstrip('#')
+            if len(hex_code) != 6:
+                print(f"Invalid Hex Code: {hex_code}")
+                return None
+            r, g, b = tuple(int(hex_code[i:i + 2], 16) for i in (0, 2, 4))
+            return (r / 255.0, g / 255.0, b / 255.0, 1.0)
+        except ValueError:
+            print("Invalid Hex input")
+            return None
+
+    def apply_body_colorscale(self, hex_code):
+        color = self.hex_to_p3d_color(hex_code)
+        if not color: return
+
+        if self.actor and not self.boss_parts:
+            self.actor.setColorScale(color)
+
+        if hasattr(self, 'boss_parts') and self.boss_parts:
+            for part_name, part_node in self.boss_parts.items():
+                if part_node and not part_node.isEmpty():
+                    part_node.setColorScale(color)
+        self.store_body_hex_color = hex_code
+        self.store_body_color = True
+
+    def apply_head_color(self, hex_code):
+        color = self.hex_to_p3d_color(hex_code)
+        if not color: return
+
+        if self.head:
+            self.head.setColor(color)
+        self.store_head_hex_color = hex_code
+        self.store_head_color = True
+
+    def apply_hand_color(self, hex_code):
+        color = self.hex_to_p3d_color(hex_code)
+        if not color: return
+
+        if self.actor:
+            hands = self.actor.find('**/hands')
+            if not hands.isEmpty():
+                hands.setColor(color)
+            else:
+                print("Hands node not found (Is this a Skelecog or a boss cog?)")
+        self.store_hand_hex_color = hex_code
+        self.store_hand_color = True
+
+    def reset_cog_colors(self):
+        if self.actor:
+            self.actor.clearColorScale()
+            hands = self.actor.find('**/hands')
+            if not hands.isEmpty():
+                hands.clearColor()
+                if self.cog_data and "hands" in self.cog_data:
+                    hands.setColor(self.cog_data["hands"])
+        if self.head:
+            self.head.clearColor()
+
+        if hasattr(self, 'boss_parts') and self.boss_parts:
+            for part_node in self.boss_parts.values():
+                if part_node and not part_node.isEmpty():
+                    part_node.clearColorScale()
+        self.store_hand_color = False
+        self.store_head_color = False
+        self.store_body_color = False
+        print("Colors reset.")
+
+    def apply_background_color(self, hex_code):
+        color = self.hex_to_p3d_color(hex_code)
+        if not color: return
+        self.background_color = color
+        self.setBackgroundColor(color)
+
+    def reset_background_color(self):
+        self.background_color = (105 / 255, 105 / 255, 105 / 255)
+        self.setBackgroundColor(self.background_color)
+
     def autoplay_animations(self):
         self.is_autoplay = self.control_panel.is_autoplay_var.get()
 
+    def build_boss_cog(self, cog_data):
+        self.control_panel.hide_tie_list()  # Hides necktie options on toggles
+        self.control_panel.show_suit_library(False)  # hides suit library
+        self.control_panel.show_body_toggle(False)  # hides toggle body
+
+        parts = cog_data["parts"]
+        anims = cog_data.get("anims", {})
+        cog_name = cog_data["name"]
+
+        if "legs" in parts:
+            root_part_name = "legs"
+        elif "body" in parts:
+            root_part_name = "body"
+        else:
+            root_part_name = "torso"  # Fallback
+
+        root_path = parts[root_part_name]
+        root_anims = anims.get(root_part_name, {})
+
+        self.actor = Actor(root_path, root_anims)
+        self.actor.reparentTo(self.render)
+        self.actor.setPos(0, 0, 0)
+        # self.actor.setHpr(0, 0, 0)
+        self.boss_parts[root_part_name] = self.actor
+        self.actor.setBlend(frameBlend=True)
+        self.actor.setTwoSided(True)
+
+        for part_name, part_path in parts.items():
+            if part_name == root_part_name: continue
+
+            part_anims = anims.get(part_name, {})
+            if part_anims:
+                part_node = Actor(part_path, part_anims)
+            else:
+                part_node = loader.loadModel(part_path)
+
+            if part_name == "torso" or part_name == "body":
+                part_node.reparentTo(self.actor.find("**/joint_pelvis"))
+
+            elif part_name == "head":
+                parent = None
+                if "torso" in self.boss_parts:
+                    parent = self.boss_parts["torso"]
+                elif "body" in self.boss_parts:
+                    parent = self.boss_parts["body"]
+                else:
+                    parent = self.actor
+
+                joint = parent.find("**/joint34")
+                if joint.isEmpty(): joint = parent.find("**/def_head")
+                if joint.isEmpty(): joint = parent.find("**/joint_head")
+
+                if not joint.isEmpty():
+                    part_node.reparentTo(joint)
+                else:
+                    print(f"Warning: Could not find head joint on {parent.getName()}")
+
+                self.head = part_node
+
+            elif part_name == "treads":
+                part_node.reparentTo(self.actor.find("**/joint_axle"))
+
+            self.boss_parts[part_name] = part_node
+
+        if "texture" in cog_data:
+            tex = loader.loadTexture(cog_data["texture"])
+            if "torso" in self.boss_parts:
+                self.boss_parts["torso"].find('**/Object').setTexture(tex, 1)
+            elif "body" in self.boss_parts:
+                self.boss_parts["body"].find('**/Object').setTexture(tex, 1)
+
+        anim_list_key = "torso" if "torso" in anims else "body"
+        self.boss_parts["legs"].find('**/mesh_doorFront').reparentTo(self.boss_parts["legs"].find('**/joint_doorFront'))
+        self.boss_parts["legs"].find('**/mesh_doorRear').reparentTo(self.boss_parts["legs"].find('**/joint_doorRear'))
+        # self.boss_parts["legs"].find('**/joint_doorFront').setHpr(0,0, 80)
+        # self.boss_parts["legs"].find('**/joint_doorRear').setHpr(0,0, -80)
+        self.boss_parts["legs"].find('**/mesh_doorFront').setPosHprScale(-1.36, 0.00, -6.30, 90.00, 281.31, 0.00, 1.00,
+                                                                         1.00, 1.00)
+        self.boss_parts["legs"].find('**/mesh_doorRear').setPosHprScale(0.34, 0.00, -6.47, 90.00, 87.00, 0.00, 1.00,
+                                                                        1.00, 1.00)
+
+        meter_parent = None
+        if "torso" in self.boss_parts:
+            meter_parent = self.boss_parts["torso"]
+        elif "body" in self.boss_parts:
+            meter_parent = self.boss_parts["body"]
+        else:
+            meter_parent = self.actor
+
+        meter_joint = meter_parent.find('**/joint_lifeMeter')
+
+        medallionColors = {'c': (0.863, 0.776, 0.769, 1.0),
+                           's': (0.843, 0.745, 0.745, 1.0),
+                           'l': (0.749, 0.776, 0.824, 1.0),
+                           'm': (0.749, 0.769, 0.749, 1.0)}
+        icon_path = os.path.join(globals.RESOURCES_DIR, "phase_3", "models", "gui", "cog_icons.bam")
+        if os.path.exists(icon_path) and not meter_joint.isEmpty():
+            dept = cog_data.get('dept', 'c')
+            icon_map = {'s': 'SalesIcon', 'm': 'MoneyIcon', 'l': 'LegalIcon', 'c': 'CorpIcon', 'g': 'CorpIcon'}
+            node_name = icon_map.get(dept, 'CorpIcon')
+
+            icon_model = loader.loadModel(icon_path)
+            icon_node = icon_model.find('**/' + node_name)
+
+            if not icon_node.isEmpty():
+                self.boss_icon = icon_node.copyTo(meter_joint)
+                if cog_data['name'] in ["CLO"]:
+                    self.boss_icon.setPosHprScale(0.00, 0.90, 0.00, 0.00, -20.00, 0.00, 2.00, 2.00, 2.00)
+                else:
+                    self.boss_icon.setPosHprScale(0.00, -0.15, 0.00, 0.00, -20.00, 0.00, 2.00, 2.00, 2.00)
+                self.boss_icon.setColor(medallionColors[dept])
+
+        gui_path = os.path.join(globals.RESOURCES_DIR, "phase_3.5", "models", "gui", "matching_game_gui.bam")
+        glow_path = os.path.join(globals.RESOURCES_DIR, "phase_3.5", "models", "props", "glow.bam")
+
+        if os.path.exists(gui_path) and os.path.exists(glow_path) and not meter_joint.isEmpty():
+            model = loader.loadModel(gui_path)
+            button = model.find('**/minnieCircle')
+
+            if not button.isEmpty():
+                self.health_meter = button.copyTo(meter_joint)
+
+                self.health_meter.setScale(6.2)
+                self.health_meter.setP(-20)
+                if cog_data['name'] in ["CLO"]:
+                    self.health_meter.setY(0.90)
+                else:
+                    self.health_meter.setY(-0.20)
+                self.health_meter.setColor(globals.SKELECOG_METER_COLORS[0])
+
+                glow = loader.loadModel(glow_path)
+                glow.reparentTo(self.health_meter)
+                glow.setScale(0.28)
+                glow.setPos(-0.005, 0.01, 0.015)
+                glow.setColor(globals.SKELECOG_METER_COLORS[0])
+
+                self.meter_glow = glow
+                self.health_meter.hide()
+                self.meter_glow.hide()
+
+        anim_list_key = "torso" if "torso" in anims else "body"
+        self.available_animations = list(anims.get(anim_list_key, {}).keys())
+        self.available_head_animations = list(anims.get("head", {}).keys())
+        self.control_panel.update_animation_lists(self.available_animations, self.available_head_animations)
+
+        self.suit_type = "boss"
+        self.skele_i = 0
+
+        if self.available_animations:
+            first_anim = self.available_animations[20]
+            self.actor.pose(first_anim, 0)
+
+            if "torso" in self.boss_parts:
+                self.boss_parts["torso"].pose(first_anim, 0)
+            elif "body" in self.boss_parts:
+                self.boss_parts["body"].pose(first_anim, 0)
+
+            self.actor.update()
+
+        self.control_panel.suit_exec_check.pack_forget()
+        self.control_panel.suit_fired_check.pack_forget()
+        self.is_costume_active = False
+        self.control_panel.is_costume_var.set(False)
+        self.control_panel.is_executive_var.set(False)
+        self.control_panel.is_fired_var.set(False)
+        self.control_panel.is_waiter_var.set(False)
+
     def toggle_virtualize(self):
+        self.store_virtualize = True
         if not hasattr(self, 'skele_color_index'):
             self.skele_color_index = 0
 
@@ -1935,14 +2824,6 @@ class CogViewer(ShowBase):
             self.actor.setDepthWrite(False)
             self.actor.setBin('fixed', 1)
 
-    def toggle_flatten(self):
-        is_flat = self.control_panel.is_flattened_var.get()
-        if is_flat:
-            self.actor.setSy(0.01)
-        else:
-            self.actor.setSy(1 * self.cog_data.get("scale", 1.0))
-        self.flatten_switch = 1 if is_flat else 0
-
     def on_tie_select(self, event=None):
         selection = self.control_panel.tie_listbox.curselection()
         if selection:
@@ -1950,22 +2831,77 @@ class CogViewer(ShowBase):
             self.set_necktie(selected_tie)
 
     def toggle_skele_meter_color(self):
+        cog_data = globals.COG_DATA[self.current_cog]
         emblem_hp = self.iconbase.find('**/emblem_hp')
         glow = self.iconbase.find('**/glow')
+
         self.skele_meter_color = globals.SKELECOG_METER_COLORS[self.skele_i]
+
         if (self.suit_type in ["as", "bs", "cs"]):
             self.health_meter.setColor(self.skele_meter_color)
             self.meter_glow.setColor(self.skele_meter_color)
+
+        elif (cog_data['name'] in ["VP", "CFO", "CLO"]):
+
+            if self.skele_i < 6:
+                if hasattr(self, 'health_meter') and self.health_meter and not self.health_meter.isEmpty():
+                    self.health_meter.show()
+                    self.health_meter.setColor(self.skele_meter_color)
+                if hasattr(self, 'meter_glow') and self.meter_glow and not self.meter_glow.isEmpty():
+                    self.meter_glow.show()
+                    self.meter_glow.setColor(self.skele_meter_color)
+                self.boss_icon.hide()
+
+            # Hide on index 6
+            elif self.skele_i == 6:
+                if hasattr(self, 'health_meter') and self.health_meter and not self.health_meter.isEmpty():
+                    self.health_meter.hide()
+                if hasattr(self, 'meter_glow') and self.meter_glow and not self.meter_glow.isEmpty():
+                    self.meter_glow.hide()
+                self.boss_icon.show()
+
+        elif (cog_data['name'] in ["CEO"]):
+
+            if self.skele_i < 6:
+                if hasattr(self, 'health_meter') and self.health_meter and not self.health_meter.isEmpty():
+                    self.health_meter.show()
+                    self.health_meter.setColor(self.skele_meter_color)
+                    self.head.find('**/ceo_sclera').setColor(0, 0, 0, 1.0)
+                    self.head.find('**/ceo_eyes').setColor(self.skele_meter_color)
+                if hasattr(self, 'meter_glow') and self.meter_glow and not self.meter_glow.isEmpty():
+                    self.meter_glow.show()
+                    self.meter_glow.setColor(self.skele_meter_color)
+                self.boss_icon.hide()
+
+            # Hide on index 6
+            elif self.skele_i == 6:
+                if hasattr(self, 'health_meter') and self.health_meter and not self.health_meter.isEmpty():
+                    self.health_meter.hide()
+                    self.head.find('**/ceo_sclera').clearColor()
+                    self.head.find('**/ceo_eyes').clearColor()
+                if hasattr(self, 'meter_glow') and self.meter_glow and not self.meter_glow.isEmpty():
+                    self.meter_glow.hide()
+                self.boss_icon.show()
+
         elif self.skele_i < 6:
             emblem_hp.show()
             glow.show()
             emblem_hp.setColor(self.skele_meter_color)
             glow.setColor(self.skele_meter_color)
+            if self.store_emblem not in ["light", "none"]:
+                self.iconbase.find(f'**/{self.store_emblem}').hide()
+
         elif self.skele_i == 6:
-            emblem_hp.hide()
-            glow.hide()
+            emblem_hp.setColor(self.skele_meter_color)
+            glow.setColor(self.skele_meter_color)
+            if self.store_emblem is not "light":
+                emblem_hp.hide()
+                glow.hide()
+                self.apply_emblem(self.store_emblem)
+
         self.skele_i += 1
         self.skele_i %= 7
+        self.store_health_meter = True
 
     def toggle_suit(self):
         cog_data = globals.COG_DATA[self.current_cog]
@@ -2029,6 +2965,13 @@ class CogViewer(ShowBase):
                 else:
                     self.head.find('**/bulbLeft').show()
 
+            elif suitToggle == "ms":
+                suit_paths = globals.SUIT_TEXTURE_PATH.get(cog_name)
+                head_paths = globals.HEAD_TEXTURE_PATH.get(cog_name)
+                self.it = (self.it + 1) % len(suit_paths)
+                tx_head = loader.loadTexture("phase_9/maps/ttcc_ene_multislacker_static_hw.png")
+                self.head.setTexture(tx_head, 1)
+
             elif suitToggle == "hr":  # High roller
                 suit_paths = globals.SUIT_TEXTURE_PATH.get(cog_data["suitToggle"])
                 body_paths = globals.HEAD_TEXTURE_PATH.get(cog_data["suitToggle"])
@@ -2060,12 +3003,12 @@ class CogViewer(ShowBase):
                 self.actor.find('**/body').setTexture(tx_suit, 1)
                 self.actor.find('**/bowtie').setTexture(tx_suit, 1)
 
-    def upload_suit_texture(self):
+    def upload_texture(self, part, target):
         root = tk.Tk()
         root.withdraw()
 
         file_path = filedialog.askopenfilename(
-            title="Select Suit Texture",
+            title=f"Select {part} Texture",
             filetypes=[
                 ("Image Files", "*.png *.jpg *.jpeg *.bmp *.tga"),
                 ("All Files", "*.*")
@@ -2085,36 +3028,344 @@ class CogViewer(ShowBase):
                 print("Error: Failed to load texture.")
                 return
 
-            self.actor.find('**/body').setTexture(new_tex, 1)
-            self.actor.find('**/necktie-s').setTexture(new_tex, 1)
-            self.actor.find('**/necktie-w').setTexture(new_tex, 1)
-            self.actor.find('**/bowtie').setTexture(new_tex, 1)
+            for node in target:
+                node.setTexture(new_tex, 1)
 
             print(f"Applied new suit texture: {file_path}")
+
+            if part == "Suit":
+                if self.suit_type not in ["as", "bs", "cs"]:
+                    self.store_suit_texture = panda_path
+                else:
+                    self.store_skelecog_texture = panda_path
+            elif part == "Head":
+                self.store_head_texture = panda_path
 
         except Exception as e:
             print(f"Failed to apply texture: {e}")
 
+    def upload_suit_texture(self):
+        suit_part = "Suit"
+        if self.cog_data["cog"] in ["VP", "CFO", "CLO", "CEO"]:
+            suit_target = [
+                self.actor.find('**/Object')
+            ]
+        else:
+            suit_target = [
+                self.actor.find('**/body'),
+                self.actor.find('**/necktie-s'),
+                self.actor.find('**/necktie-w'),
+                self.actor.find('**/bowtie')
+            ]
+        self.upload_texture(suit_part, suit_target)
+
+    def upload_head_texture(self):
+        head_part = "Head"
+        head_target = [
+            self.head
+        ]
+        self.upload_texture(head_part, head_target)
+
+    # Used for Suit Library
+    def apply_suit_texture(self, texture_path):
+        if self.actor:
+            # Storing data for model function
+            # if texture_path not in globals.SUIT_TEXTURES["Skelecog"].values():
+            if self.suit_type not in ["as", "bs", "cs"]:
+                self.store_suit_texture = texture_path
+            else:
+                self.store_skelecog_texture = texture_path
+
+            texture = loader.loadTexture(texture_path)
+            if self.suit_type not in ["erfit", "boss"]:
+                suit_nodes = [
+                    self.actor.find('**/body'),
+                    self.actor.find('**/necktie-s'),
+                    self.actor.find('**/necktie-w'),
+                    self.actor.find('**/bowtie')
+                ]
+            else:
+                suit_nodes = [self.actor.find('**/body')]
+            if texture:
+                for node in suit_nodes:
+                    node.setTexture(texture, 1)
+                # skelecog head
+                if self.cog_data["head"] in globals.SKELECOG_HEAD_DICT and self.store_skelecog_texture is not None:
+                    amongus = loader.loadTexture(self.store_skelecog_texture)
+                    self.head.setTexture(amongus, 1)
+                    self.store_head_texture = self.store_skelecog_texture
+
+    def set_stored_vals(self):
+        # Store Costume
+        self.store_costume = self.is_costume_active
+        # Store body animations
+        self.store_body_loop = self.control_panel.loop_body_var.get()
+        # Store head animations
+        self.store_head_frame = self.control_panel.head_frame_slider.get()
+        self.store_head_loop = self.control_panel.loop_head_var.get()
+
+    def apply_suit_model(self, suit_model_key):
+        if self.actor:
+            self.set_stored_vals()
+            # Rebuild cog
+            self.build_cog(suit_model_key, False)
+            self.update_cog_attributes(suit_model_key)
+
+    def reset_stored_vals(self):
+        # Reset the stored values
+        self.store_suit_texture = None
+        self.store_skelecog_texture = None
+        self.store_head_texture = None
+        self.store_necktie = "(Default)"
+        self.it, self.it2, self.it_l, self.it_m, self.it_r = 0, 0, 0, 0, 0
+        self.skele_i = 0
+        self.skele_color_index = 0
+        self.store_virtualize = False
+        self.store_health_meter = False
+        self.store_emblem = globals.COG_DATA[self.current_cog]["emblem"]
+        self.store_head_hpr = globals.HEAD_HPR_DEFAULTS.copy()
+        self.control_panel.reset_head_hpr()
+        # Stored unique toggles
+        self.store_unique_suit_toggle = False
+        self.store_cycle_slot_l = False
+        self.store_cycle_slot_m = False
+        self.store_cycle_slot_r = False
+        # Body anim
+        self.store_body_anim = None
+        self.store_body_frame = 0
+        self.store_body_adjusted = False
+        self.store_body_playing = False
+        # Head anim
+        self.store_head_anim = None
+        self.store_head_frame = 0
+        self.store_head_adjusted = False
+        self.store_head_playing = False
+        # Scale
+        self.control_panel.reset_flatten()
+        self.store_flatten_body = {
+            "Sx": self.cog_data.get("scale", 1.0),
+            "Sy": self.cog_data.get("scale", 1.0),
+            "Sz": self.cog_data.get("scale", 1.0),
+        }
+        self.store_flatten_head = {
+            "Sx": self.cog_data.get("headSize", 1.0),
+            "Sy": self.cog_data.get("headSize", 1.0),
+            "Sz": self.cog_data.get("headSize", 1.0),
+        }
+        # Stored Colors
+        self.store_body_hex_color = None
+        self.store_body_color = False
+        self.store_head_hex_color = None
+        self.store_head_color = False
+        self.store_hand_hex_color = None
+        self.store_hand_color = False
+        # Stored Props
+        self.current_prop1 = "zero"
+        self.current_prop2 = "zero"
+        self.store_prop1 = "zero"
+        self.store_prop2 = "zero"
+        self.store_prop1_hpr = globals.HEAD_HPR_DEFAULTS.copy()
+        self.store_prop2_hpr = globals.HEAD_HPR_DEFAULTS.copy()
+        self.store_custom_model = None
+        self.store_custom_model_hpr = globals.HEAD_HPR_DEFAULTS.copy()
+
+    def update_cog_attributes(self, suit_model_key=None, costume_check=False):
+        autoplay = self.control_panel.is_autoplay_var.get()
+
+        # -- NECKTIE LOGIC -- #
+        if self.store_necktie != "(Default)":
+            self.set_necktie(self.store_necktie)
+            self.control_panel.selected_tie_var.set(self.store_necktie)
+
+        # -- HALLOWEEN COSTUME LOGIC -- #
+        if self.store_costume and not costume_check:
+            self.toggle_costume(False)
+            self.control_panel.is_costume_var.set(True)
+
+        # -- HEAD TEXTURE LOGIC -- #
+        if self.store_head_texture is not None:
+            head_tex = loader.loadTexture(self.store_head_texture)
+            self.head.setTexture(head_tex, 1)
+
+        # -- SUIT TEXTURE LOGIC -- #
+        # - Non-Skelecog -#
+        if self.cog_data["suit"] not in ("as", "bs", "cs"):
+            # skelecog body model #
+            if suit_model_key in ("as", "bs", "cs"):
+                if self.store_skelecog_texture is not None:  # If skelecog texture already stored
+                    self.apply_suit_texture(self.store_skelecog_texture)
+                else:  # Else default to normal texture
+                    self.apply_suit_texture(globals.DEPT_SKELE_SUIT_TEX_MAP[self.cog_data["dept"]])
+            # if suit texture is already stored #
+            elif self.store_suit_texture is not None:
+                self.apply_suit_texture(self.store_suit_texture)
+        # - Skelecog -#
+        else:
+            # normal model #
+            if suit_model_key not in ("as", "bs", "cs"):
+                # if suit texture is already stored
+                if self.store_suit_texture is not None:
+                    self.apply_suit_texture(self.store_suit_texture)
+                else:
+                    self.apply_suit_texture(globals.DEPT_SUIT_TEX_MAP[self.cog_data["dept"]])
+                # Skelecog using suitB closed collar model
+                if suit_model_key in ["bc"]:
+                    hand_tex = loader.loadTexture(globals.DEPT_SUIT_TEX_MAP[self.cog_data["dept"]])
+                    self.actor.find('**/hands').setTexture(hand_tex, 1)
+            # skelecog model #
+            elif self.store_skelecog_texture is not None:
+                self.apply_suit_texture(self.store_skelecog_texture)
+
+        # -- VIRTUALIZED LOGIC -- #
+        if self.store_virtualize:
+            self.skele_color_index = (self.skele_color_index - 1) % len(globals.SKELECOG_METER_COLORS)
+            self.toggle_virtualize()
+
+        # -- EMBLEM LOGIC -- #
+        if self.store_emblem is not None:
+            self.apply_emblem(self.store_emblem)
+
+        # -- HEALTH METER LOGIC -- #
+        if self.store_health_meter:
+            self.skele_i -= 1
+            self.skele_i %= 7
+            self.toggle_skele_meter_color()
+
+        # -- BODY ANIMATION LOGIC -- #
+        if self.store_body_anim is not None:
+            self.set_animation(self.store_body_anim)
+            self.control_panel.loop_body_var.set(self.store_body_loop)
+            self.control_panel.body_frame_slider.set(self.store_body_frame)
+            # Pose the cog to frame
+            self.actor.pose(self.store_body_anim, self.store_body_frame)
+
+            if not self.store_body_adjusted:
+                # Bugfix: if autoplay is off and you last pressed the play button, the animation will play
+                if not autoplay and self.store_body_playing:
+                    self.play_body_animation()
+                else:
+                    self.check_body_autoplay()
+
+        # -- HEAD ANIMATION LOGIC -- #
+        if self.store_head_anim is not None:
+            self.set_head_animation(self.store_head_anim)
+            self.control_panel.loop_head_var.set(self.store_head_loop)
+            self.control_panel.head_frame_slider.set(self.store_head_frame)
+            # Pose the head to frame
+            self.head.pose(self.store_head_anim, self.store_head_frame)
+
+            if not self.store_head_adjusted:
+                # Bugfix: if autoplay is off and you last pressed the play button, the animation will play
+                if not autoplay and self.store_head_playing:
+                    self.play_head_animation()
+                else:
+                    self.check_head_autoplay()
+
+        # -- HEAD HPR LOGIC -- #
+        for axis, value in self.store_head_hpr.items():
+            self.update_head_hpr(axis, value)
+        self.control_panel.update_head_hpr_sliders()
+
+        # -- SET SCALE LOGIC -- #
+        for axis, value in self.store_flatten_body.items():
+            self.update_flatten_body(axis, value)
+        for axis, value in self.store_flatten_head.items():
+            self.update_flatten_head(axis, value)
+
+        # -- SET COLOR LOGIC -- #
+        if self.store_body_color:
+            self.apply_body_colorscale(self.store_body_hex_color)
+        if self.store_head_color:
+            self.apply_head_color(self.store_head_hex_color)
+        if self.store_hand_color:
+            self.apply_hand_color(self.store_hand_hex_color)
+
+        # -- UNIQUE SUIT TOGGLE LOGIC -- #
+        if self.store_unique_suit_toggle:
+            self.toggle_unique_suit(False)
+
+        # -- DUCK SHUFFLER SLOT TOGGLE LOGIC -- #
+        if self.current_cog == "Duck Shuffler":
+            if self.store_cycle_slot_l:
+                self.cycle_slot_l(False)
+            if self.store_cycle_slot_m:
+                self.cycle_slot_m(False)
+            if self.store_cycle_slot_r:
+                self.cycle_slot_r(False)
+
+        # -- UPLOAD ACCESSORY LOGIC -- #
+        if self.store_custom_model is not None:
+            self.custom_model = loader.loadModel(self.store_custom_model)
+            self.load_custom_model()
+
+        for axis, value in self.store_custom_model_hpr.items():
+            self.update_custom_model_hpr(axis, value)
+
+        # -- PROP LOGIC -- #
+        self.load_stored_props()
+
+    def load_stored_props(self):
+        # Prop 1
+        if self.store_prop1 != "zero":                        # Load prop 1
+            self.set_prop(self.store_prop1, False)
+
+        for axis, value in self.store_prop1_hpr.items():        # Update HPR
+            self.update_prop_hpr(axis, value)
+
+        # Prop 2
+        if self.store_prop2 != "zero":                        # Load prop 2
+            self.set_prop2(self.store_prop2, False)
+
+        for axis, value in self.store_prop2_hpr.items():        # Update HPR
+            self.update_prop2_hpr(axis, value)
+
+    def apply_emblem(self, emblem_name):
+        if self.actor:
+            self.store_emblem = emblem_name
+            emblem_map = globals.EMBLEM_MAP
+            self.iconbase.show()
+
+            # Hide all the emblems
+            for emblem in list(emblem_map)[:-2]:
+                current_emblem = globals.EMBLEM_MAP.get(emblem)
+                self.iconbase.find(f'**/{current_emblem}').hide()
+                if self.actor.find('**/emblem_healthmeter'):
+                    self.actor.find('**/emblem_healthmeter').show()
+                    self.actor.find('**/glow').show()
+
+            # Department Emblems
+            if emblem_name not in ["light", "none"]:
+                # Hide hp glow if it's active
+                self.iconbase.find('**/emblem_hp').hide()
+                self.iconbase.find('**/glow').hide()
+                # Show the picked emblem
+                self.iconbase.find(f'**/{emblem_name}').show()
+
+            # Light
+            elif emblem_name is "light":
+                self.iconbase.find('**/emblem_hp').show()
+                self.iconbase.find('**/glow').show()
+                if self.skele_i > 0:
+                    self.skele_i -= 1
+                    self.skele_i %= 6
+                    self.toggle_skele_meter_color()
+
+            # None
+            else:
+                self.iconbase.find('**/emblem_hp').hide()
+                self.iconbase.find('**/glow').hide()
+                if self.actor.find('**/emblem_healthmeter'):
+                    self.actor.find('**/emblem_healthmeter').hide()
+                    self.actor.find('**/glow').hide()
+                self.iconbase.hide()
+
     def update_custom_model_hpr(self, axis, value):
         """Callback for the custom model's HPR/XYZ/Scale sliders."""
         if self.custom_model and not self.custom_model.isEmpty():
-            if axis == "x":
-                self.custom_model.setX(value)
-            elif axis == "y":
-                self.custom_model.setY(value)
-            elif axis == "z":
-                self.custom_model.setZ(value)
-            elif axis == "h":
-                self.custom_model.setH(value)
-            elif axis == "p":
-                self.custom_model.setP(value)
-            elif axis == "r":
-                self.custom_model.setR(value)
-            elif axis == "scale":
-                self.custom_model.setScale(value)
+            self.set_POSHPR(self.custom_model, axis, value)
+            self.store_custom_model_hpr[axis] = value
 
     def upload_custom_model(self):
-        """Opens a dialog to load a custom .bam file."""
         if not self.actor or self.actor.isEmpty():
             print("Please load a Cog before adding a custom model.")
             return
@@ -2136,25 +3387,32 @@ class CogViewer(ShowBase):
             if self.custom_model and not self.custom_model.isEmpty():
                 self.custom_model.removeNode()
                 self.custom_model = None
+                self.store_custom_model = None
 
             self.custom_model = loader.loadModel(panda_path)
+            self.store_custom_model = panda_path
             if not self.custom_model:
                 print(f"Error: Failed to load model {panda_path}")
                 return
 
-            head_joint = self.actor.find('**/joint_head')
-            if not head_joint.isEmpty():
-                self.custom_model.reparentTo(head_joint)
-            else:
-                self.custom_model.reparentTo(self.actor)  # Fallback
-
-            self.control_panel.show_custom_model_tab(True)
+            self.load_custom_model()
             self.control_panel.reset_prop_sliders(self.control_panel.custom_model_vars)
+            for axis, value in globals.HEAD_HPR_DEFAULTS.items():
+                self.update_custom_model_hpr(axis, value)
 
             print(f"Loaded custom model: {file_path}")
 
         except Exception as e:
             print(f"Failed to load custom model: {e}")
+
+    def load_custom_model(self):
+        head_joint = self.actor.find('**/joint_head')
+        if not head_joint.isEmpty():
+            self.custom_model.reparentTo(head_joint)
+        else:
+            self.custom_model.reparentTo(self.actor)  # Fallback
+
+        self.control_panel.show_custom_model_tab(True)
 
     def update_frame(self, task):
         if not self.actor or self.current_animation == "zero":
@@ -2162,7 +3420,7 @@ class CogViewer(ShowBase):
             if self.bool:
                 self.setBackgroundColor(0, 0, 0)
             else:
-                self.setBackgroundColor(105 / 255, 105 / 255, 105 / 255)
+                self.setBackgroundColor(self.background_color)
             return task.done
 
         total_frames = self.actor.getNumFrames(self.current_animation)
@@ -2200,7 +3458,7 @@ class CogViewer(ShowBase):
             if self.bool:
                 self.setBackgroundColor(0, 0, 0)
             else:
-                self.setBackgroundColor(105 / 255, 105 / 255, 105 / 255)
+                self.setBackgroundColor(self.background_color)
 
             self.play_body_animation()
             if has_head_anim:
@@ -2226,14 +3484,60 @@ class CogViewer(ShowBase):
         self.taskMgr.doMethodLater(1 / 24, self.start_screenshots, "StartScreenshotsTask")
 
     def update_body_pose(self, frame_value):
-        if self.current_animation != "zero" and self.actor:
+        if self.current_animation != "zero":
             frame = int(round(float(frame_value)))
-            self.actor.pose(self.current_animation, frame)
+            if frame != 0:
+                self.store_body_frame = frame
+                self.store_body_adjusted = True
+                self.store_body_playing = False
+
+            # Boss Cog Behavior
+            if self.cog_data.get("cog_type") == "boss" and hasattr(self, "boss_parts"):
+                for part_name, part_actor in self.boss_parts.items():
+                    if part_name == "head": continue
+                    if isinstance(part_actor, Actor):
+                        part_actor.pose(self.current_animation, frame)
+
+            # Standard Cog Behavior
+            elif self.actor:
+                self.actor.pose(self.current_animation, frame)
 
     def update_head_pose(self, frame_value):
         if self.current_head_animation != "zero" and self.head:
             frame = int(round(float(frame_value)))
+            if frame != 0:
+                self.store_head_frame = frame
+                self.store_head_adjusted = True
+                self.store_head_playing = False
             self.head.pose(self.current_head_animation, frame)
+
+    def get_head_hpr_default_values(self):
+        defaults = {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "h": 0.0,
+            "p": 0.0,
+            "r": 0.0,
+            "scale": 1.0
+        }
+        cog = globals.COG_DATA.get(self.current_cog, {})
+
+        head_pos_map = {
+            "headPos": "z",
+            "headPosY": "y",
+            "headPosH": "h",
+            "headPosP": "p",
+            "headSize": "scale"
+        }
+        for pos_key, pos_type in head_pos_map.items():
+            value = cog.get(pos_key)
+            if value is not None:
+                defaults[pos_type] = value
+
+        globals.HEAD_HPR_DEFAULTS = defaults.copy()
+
+        return defaults
 
 
 app = CogViewer()
