@@ -1763,18 +1763,14 @@ class CogViewer(ShowBase):
             pos = self.actor.getPos()
             current_hpr = self.actor.getHpr()
 
-            # --- FIX START: Check if the previous Cog was a Boss ---
             prev_is_boss = False
             if self.cog_data:
                 prev_is_boss = self.cog_data.get("cog_type") == "boss"
 
-            # If we are coming from a Boss Cog, reset the rotation to default (180).
-            # Otherwise, preserve the current rotation (e.g. browsing standard cogs).
             if prev_is_boss:
                 hpr = globals.DEFAULT_HPR
             else:
                 hpr = current_hpr
-            # --- FIX END ---
 
             self.actor.cleanup()
             self.actor.removeNode()
