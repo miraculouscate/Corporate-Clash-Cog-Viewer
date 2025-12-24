@@ -3048,6 +3048,14 @@ class CogViewer(ShowBase):
             suit_target = [
                 self.actor.find('**/Object')
             ]
+        elif self.suit_type not in ["as", "bs", "cs"]:
+            suit_target = [
+                self.actor.find('**/body'),
+                self.actor.find('**/necktie-s'),
+                self.actor.find('**/necktie-w'),
+                self.actor.find('**/bowtie'),
+                self.actor.find('**/hands')
+            ]
         else:
             suit_target = [
                 self.actor.find('**/body'),
